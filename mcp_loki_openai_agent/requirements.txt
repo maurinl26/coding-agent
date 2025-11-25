@@ -1,0 +1,3 @@
+loki @ git+https://github.com/ecmwf-ifs/loki.git
+openai
+fparser
