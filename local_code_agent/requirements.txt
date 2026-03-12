@@ -1,0 +1,17 @@
+# Dépendances Python pour local_code_agent
+# Compatibles Mac Mini Apple Silicon (M-series)
+
+# LangChain core
+langchain>=0.3
+langchain-core>=0.3
+langchain-community>=0.3
+
+# Intégration Ollama (remplace langchain-community pour Ollama depuis v0.2)
+langchain-ollama>=0.2
+
+# Utilitaires
+python-dotenv>=1.0       # Chargement optionnel d'un fichier .env
+
+# Serveur MCP
+fastmcp>=2.10.0           # Framework pour exposer l'agent via le Model Context Protocol
+
