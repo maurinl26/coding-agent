@@ -1,0 +1,34 @@
+[project]
+name = "local-code-agent"
+version = "0.1.0"
+description = "A 100% Private MCP Coding Assistant and Scientific Porting Pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "CodeAgent", email = "auto@example.com" }
+]
+dependencies = [
+    "langchain>=0.3",
+    "langchain-core>=0.3",
+    "langchain-community>=0.3",
+    "langchain-ollama>=0.2",
+    "python-dotenv>=1.0",
+    "fastmcp>=2.10.0",
+    "langgraph>=0.2.0",
+    "numpy",
+    "pytest"
+]
+
+[project.scripts]
+# Main Server
+run-mcp = "local_code_agent.server:main"
+
+# Scientific Pipeline Agents (Individual Direct Hooks)
+agent-translate = "local_code_agent.agent.cli:run_translate"
+agent-profile = "local_code_agent.agent.cli:run_profile"
+# To invoke the whole graph from a single command
+agent-pipeline = "local_code_agent.agent.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

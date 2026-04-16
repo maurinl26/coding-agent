@@ -1,0 +1,21 @@
+Bootstrap: docker-daemon
+From: ghcr.io/maurinl26/coding-agent-hpc:latest
+# NOTE: En CI, Total buildera d'abord l'image Docker locale, puis Apptainer l'avalera via docker-daemon.
+# Alternative: Bootstrap: docker / From: nvcr.io/nvidia/jax:24.03-py3
+
+%post
+    # L'image Docker contient l'essentiel.
+    # Ceci sert de post-traitement si nécessaire pour les modules Slurm.
+    echo "Apptainer container build for TotalEnergies Pangea completed."
+
+%environment
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    # Exécution universelle du script transmis en argument (ex: agent-pipeline translate)
+    exec uv run "$@"
+
+%labels
+    Author "Loic Maurin"
+    Version "v1.0"
+    Description "Fortran to JAX Translation Agent HPC Container"

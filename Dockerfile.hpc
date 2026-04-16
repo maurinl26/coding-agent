@@ -1,0 +1,30 @@
+# Image de base fournie nativement sur Pangea pour JAX et H100
+FROM nvcr.io/nvidia/jax:24.03-py3
+
+ENV PYTHONUNBUFFERED=1
+
+# Installation de uv (Package manager Python haute performance)
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+
+# Installation de dépendances systèmes pour f2py / gfortran / loki
+RUN apt-get update && apt-get install -y \
+    gfortran \
+    build-essential \
+    clang-format \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copie des configurations
+COPY pyproject.toml .
+# Installe les dépendances via uv (cela crée implicitement un virtualenv s'il n'y en a pas, ou installe globalement si configuré)
+RUN uv pip install --system -e .
+
+# Copie du code source complet
+COPY . .
+
+# Déclaration d'entrée universelle
+# Par défaut, exécute le serveur ou le script voulu.
+# Utilisable via slurm: `apptainer run my_agent.sif agent-pipeline translate /target/file.f90`
+ENTRYPOINT ["uv", "run"]
+CMD ["agent-pipeline", "--help"]

@@ -1,7 +1,7 @@
 """Serveur MCP (FastMCP) exposant le CodeAgent à Antigravity via HTTP/SSE."""
 import os
 from fastmcp import FastMCP
-from local_code_agent.agent import CodeAgent
+from local_code_agent.agent.code_agent import CodeAgent
 
 # Instance unique de l'agent (chargement du LLM au démarrage)
 _agent: CodeAgent | None = None
@@ -49,6 +49,57 @@ def agent_status() -> str:
         f"  Workspace : {config.workspace_dir}\n"
         f"  Max itérations : {config.max_iterations}\n"
     )
+
+
+@mcp.tool()
+def translate_kernel(filepath: str) -> str:
+    """Traduit un kernel Fortran en JAX en utilisant la pipeline multi-agents.
+    
+    Args:
+        filepath: Le chemin absolu vers le fichier .f90.
+    """
+    from local_code_agent.agent.translation_graph import translation_app
+    
+    # Lecture initiale du fichier
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            code = f.read()
+    except Exception as e:
+        return f"Erreur de lecture du fichier: {e}"
+
+    initial_state = {
+        "fortran_filepath": filepath,
+        "fortran_code": code,
+        "ast_info": {},
+        "isolated_kernel": "",
+        "jax_code": "",
+        "compilation_error": "",
+        "test_results": {},
+        "performance_metrics": {}
+    }
+    
+    final_state = translation_app.invoke(initial_state)
+    
+    return (f"=== Traduction Terminée ===\n"
+            f"Fichier : {filepath}\n\n"
+            f"Code JAX généré :\n```python\n{final_state['jax_code']}\n```\n\n"
+            f"Reproductibilité : {final_state['test_results']}\n"
+            f"Performances : {final_state['performance_metrics']}")
+
+
+@mcp.tool()
+def profile_kernels(filepath: str) -> str:
+    """Compare les performances entre le fichier Fortran et sa traduction JAX existante.
+    
+    Args:
+        filepath: Le chemin absolu vers le fichier .f90 original.
+    """
+    from local_code_agent.agent.translation_graph import performance_agent
+    
+    # Appel de l'agent de perf en mode isolé
+    state = {"fortran_filepath": filepath, "performance_metrics": {}} # type: ignore
+    result = performance_agent(state)
+    return str(result["performance_metrics"])
 
 
 if __name__ == "__main__":

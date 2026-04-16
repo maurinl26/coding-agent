@@ -1,0 +1,40 @@
+name: Fortran to JAX Automated Translation
+
+on:
+  pull_request:
+    paths:
+      - '**/*.f90'
+      - '**/*.F90'
+      - '**/*.f'
+  workflow_dispatch:
+
+jobs:
+  translation-and-profiling:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/jax-translation-agent:latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Multi-Agent Translator
+        run: |
+          # Finds all specifically added/modified .f90 files in this PR
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD | grep -E '\.f90$|\.F90$')
+          
+          for file in $CHANGED_FILES; do
+             echo "Processing $file..."
+             # We assume python module exposes a CLI wrapper around the LangGraph
+             python -m local_code_agent.agent.cli translate "$file"
+             python -m local_code_agent.agent.cli profile "$file"
+          done
+
+      - name: Commit and Push Translated JAX Code
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "**/*_jax.py"
+          git commit -m "chore: Auto-translated Fortran to JAX :robot:" || echo "No changes to commit"
+          git push

@@ -1,9 +1,9 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/modelcontextprotocol/logo/main/mcp-logo.svg" width="120" alt="MCP Logo" />
-  <h1>🤖 Local Code Agent SaaS</h1>
-  <p><strong>A 100% Private, Secure, and Agentic Coding Assistant powered by Mistral NeMo 12B and the Model Context Protocol (MCP).</strong></p>
+  <h1>🤖 Local Code Agent: Fortran ↔ JAX HPC</h1>
+  <p><strong>Proprietary Evaluation Agent for TotalEnergies Exascale translation. Scaled via LangGraph, Loki parsing, and GHEX MPI abstractions.</strong></p>
   
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
   [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org)
   [![MCP](https://img.shields.io/badge/MCP-Ready-green.svg)](https://modelcontextprotocol.io/)
   
@@ -62,14 +62,15 @@ docker compose up -d --build
 ```
 *(On the first run, the Mistral NeMo 12B model weighting ~7GB will be pulled automatically).*
 
-### 3. Connect your IDE (Antigravity)
+### 3. Connect your IDEs
 
-Open your `mcp_config.json` file in Antigravity or Claude Desktop:
+#### Antigravity Setup
+Open your `mcp_config.json` file in Antigravity (or use the visual MCP settings menu):
 
 ```json
 {
   "mcpServers": {
-    "local-saas-agent": {
+    "fortran-jax-agent": {
       "command": "node",
       "args": ["-e", "console.log('Connecting via SSE')"],
       "transport": "sse",
@@ -82,17 +83,90 @@ Open your `mcp_config.json` file in Antigravity or Claude Desktop:
 }
 ```
 
+#### LazyVIM Setup
+To use these agents within LazyVIM, you need an MCP-compatible plugin such as `mcp.nvim` (or `neo-mcp`). Add the following to your Neovim Lua config (e.g., `lua/plugins/mcp.lua`):
+
+```lua
+return {
+  {
+    "your-mcp/plugin.nvim",
+    opts = {
+      servers = {
+        fortran_jax = {
+          protocol = "sse",
+          endpoint = "http://localhost:8000/sse",
+          headers = {
+            ["Authorization"] = "Bearer your_secure_password",
+          }
+        }
+      }
+    }
+  }
+}
+```
+Reload LazyVIM. You can now execute MCP tools like `:MCPCall translate_kernel filepath=%` directly from an open `.f90` buffer!
+
 ---
 
-## 🛒 Client Portal (SaaS Billing)
+## 🛒 Distribution Strategy (SaaS)
 
-This repository also includes a **Next.js + Vercel + Stripe** billing portal in the `client-portal/` directory, allowing you to monetize access to your hosted MCP agent securely.
+If you intend to distribute these scientific translation agents to external clients (B2B research centers), the repository provides two main distribution architectures depending on their security needs.
+
+### 1. Cloud-Hosted SaaS (Zero-Setup Approach)
+Using the provided `client-portal/` (Next.js + Stripe), you can host the FastMCP server (`server.py`) and the LangGraph orchestrator centrally. 
+- **The Flow**: Clients subscribe via the portal -> They receive a unique API Key -> They configure their Antigravity/LazyVIM to point to your secure Cloudflare tunnel `https://mcp.yourdomain.com/sse`.
+- **Pros**: Client has zero compute cost; instant updates to the agent logic.
+- **Cons**: Client's Fortran code must transit over the internet to your server.
+
+### 2. On-Premise Docker Enterprise Deployment (High-Security Approach)
+For institutions that cannot allow source code to leave their localized network.
+- **The Flow**: Clients purchase a license through the portal -> They unlock access to a private Docker Registry -> They pull a pre-compiled `ghcr.io/your-brand/fortran-agents-engine` image -> They run it locally.
+- **Pros**: 100% Data Privacy (Zero Data Leakage). 
+- **Cons**: Client needs capable local hardware (or local GPU clusters) to run the Ollama LLM and the profiling.
 
 ```bash
 cd client-portal
 npm install
 npm run dev
 ```
+
+---
+
+## 🔬 Scientific Porting: Fortran to JAX (seismic_cpml)
+
+This repository hosts a dedicated multi-agent pipeline designed to automatically translate legacy Fortran 90 simulations (`seismic_cpml`) into high-performance JAX (Python) modules.
+
+### The Agent Workflow (LangGraph)
+1. **Parser Agent**: Extracts pure numerical kernels from `.f90` files using ECMWF `loki-ifs`. *(MPI and Halos are delegated down the line)*
+2. **Translation Agent (LLM)**: Analyzes Fortran syntax and maps it to specific JAX vectorization patterns (`jax.lax.scan`, `jax.vmap`).
+3. **Docstring Agent (LLM)**: Inspects the literature context, links the original `.f90` file, infers the research paper, and explicitly writes the exact mathematical formula being calculated inside the python docstrings.
+4. **Reproducibility Agent**: Generates `f2py` testing harnesses and validates the JAX output against the native Fortran binaries using `np.testing.assert_allclose`.
+5. **Performance Agent**: Evaluates generated JAX kernels against the Fortran execution on CPU vs GPU bounds.
+
+### 🧪 How to test the translation agents right now?
+
+We designed the pipeline to be exposed seamlessly either locally via your IDE, or automatically in GitHub PRs.
+
+**Method 1: Interactive IDE Testing (Antigravity/LazyVIM)**
+If you are connected to the FastMCP server, the agent exposes two direct tools:
+- `translate_kernel(filepath: str)`: Supply the absolute path to a Fortran file, and the multi-agent graph will process it and return the pure JAX code.
+- `profile_kernels(filepath: str)`: Compare an existing Fortran/JAX pair for performance benchmarks.
+
+**Method 2: Command Line Interface (CLI) via UV**
+We integrated standard pyproject configuration. Using the fast `uv` package manager, you can trigger individual agents natively:
+
+```bash
+# Execute the full translation pipeline (Parser -> Translator -> Docstring -> Tests -> Perf)
+uv run agent-pipeline translate "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
+
+# Or trigger isolated agents directly:
+uv run agent-translate "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
+uv run agent-profile "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
+```
+
+**Method 3: GitHub Actions (Automated PRs)**
+The repository comes equipped with `.github/workflows/jax-translation.yml` and a specific `Dockerfile.ci`.
+Simply commit a new `.f90` file to a branch and push. The CI will trigger the extraction agents and automatically inject the `_jax.py` results into your PR.
 
 ---
 
