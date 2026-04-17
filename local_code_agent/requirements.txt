@@ -5,6 +5,7 @@
 langchain>=0.3
 langchain-core>=0.3
 langchain-community>=0.3
+langchain-mistralai>=0.1
 
 
 # Utilitaires
@@ -18,3 +19,4 @@ fastmcp>=2.10.0           # Framework pour exposer l'agent via le Model Context 
 langgraph>=0.2.0
 numpy
 pytest
+loki @ file://localhost/Users/loicmaurin/PycharmProjects/coding-agent/loki

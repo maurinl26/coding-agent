@@ -1,7 +1,10 @@
 """Configuration centralisée du local_code_agent."""
 from dataclasses import dataclass, field
 import os
+from dotenv import load_dotenv
 
+# Charge manuellement le .env pour court-circuiter le terminal de l'IDE
+load_dotenv()
 
 @dataclass
 class AgentConfig:
