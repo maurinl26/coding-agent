@@ -5,9 +5,8 @@ import os
 
 @dataclass
 class AgentConfig:
-    # --- Ollama ---
-    ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    model_name: str = os.getenv("OLLAMA_MODEL", "mistral-nemo:12b")
+    # --- Modèle Azure par défaut ---
+    model_name: str = os.getenv("AZURE_MISTRAL_MODEL", "mistral-large-latest")
 
     # --- Paramètres de génération ---
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))

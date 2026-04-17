@@ -6,8 +6,6 @@ langchain>=0.3
 langchain-core>=0.3
 langchain-community>=0.3
 
-# Intégration Ollama (remplace langchain-community pour Ollama depuis v0.2)
-langchain-ollama>=0.2
 
 # Utilitaires
 python-dotenv>=1.0       # Chargement optionnel d'un fichier .env

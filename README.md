@@ -108,27 +108,7 @@ Reload LazyVIM. You can now execute MCP tools like `:MCPCall translate_kernel fi
 
 ---
 
-## 🛒 Distribution Strategy (SaaS)
 
-If you intend to distribute these scientific translation agents to external clients (B2B research centers), the repository provides two main distribution architectures depending on their security needs.
-
-### 1. Cloud-Hosted SaaS (Zero-Setup Approach)
-Using the provided `client-portal/` (Next.js + Stripe), you can host the FastMCP server (`server.py`) and the LangGraph orchestrator centrally. 
-- **The Flow**: Clients subscribe via the portal -> They receive a unique API Key -> They configure their Antigravity/LazyVIM to point to your secure Cloudflare tunnel `https://mcp.yourdomain.com/sse`.
-- **Pros**: Client has zero compute cost; instant updates to the agent logic.
-- **Cons**: Client's Fortran code must transit over the internet to your server.
-
-### 2. On-Premise Docker Enterprise Deployment (High-Security Approach)
-For institutions that cannot allow source code to leave their localized network.
-- **The Flow**: Clients purchase a license through the portal -> They unlock access to a private Docker Registry -> They pull a pre-compiled `ghcr.io/your-brand/fortran-agents-engine` image -> They run it locally.
-- **Pros**: 100% Data Privacy (Zero Data Leakage). 
-- **Cons**: Client needs capable local hardware (or local GPU clusters) to run the Ollama LLM and the profiling.
-
-```bash
-cd client-portal
-npm install
-npm run dev
-```
 
 ---
 

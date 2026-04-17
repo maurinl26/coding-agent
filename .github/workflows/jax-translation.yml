@@ -19,16 +19,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Multi-Agent Translator
+      - name: Install Bencher
+        uses: bencherdev/bencher@main
+
+      - name: Run Multi-Agent Translator and Bencher
+        env:
+          BENCHER_PROJECT: seismic-cpml
+          BENCHER_TESTBED: ubuntu-latest
+          BENCHER_ADAPTER: json
         run: |
           # Finds all specifically added/modified .f90 files in this PR
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD | grep -E '\.f90$|\.F90$')
           
           for file in $CHANGED_FILES; do
              echo "Processing $file..."
-             # We assume python module exposes a CLI wrapper around the LangGraph
-             python -m local_code_agent.agent.cli translate "$file"
-             python -m local_code_agent.agent.cli profile "$file"
+             
+             # Exécution du pipeine englobé par Bencher
+             bencher run \
+               --project "seismic-cpml" \
+               --token "${{ secrets.BENCHER_API_TOKEN }}" \
+               --branch "${{ github.ref_name }}" \
+               --adapter json \
+               --file bencher_report.json \
+               --err \
+               "python -m local_code_agent.agent.cli translate \"$file\" && python -m local_code_agent.agent.cli profile \"$file\""
           done
 
       - name: Commit and Push Translated JAX Code
