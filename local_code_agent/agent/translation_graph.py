@@ -385,28 +385,29 @@ def parse_and_isolate_agent(state: TranslationState) -> TranslationState:
         if not source.routines:
             raise ValueError("No Fortran routines found in the file.")
 
-        # --- BILAN TECHNIQUE DES ROUTINES ---
-        print(f"  ✅ Loki parsed successfully")
-        print(f"\n  📊 [Analysis Report]")
-        print(f"  {'Routine':<20} | {'Lines':<6} | {'Loops':<6} | {'I/O':<4} | {'Calls'}")
-        print(f"  {'-'*20}-+-{'-'*6}-+-{'-'*6}-+-{'-'*4}-+-{'-'*10}")
-        
-        project_report = {}
-        for r in source.routines:
-            r_fortran = r.to_fortran()
-            r_lines = len(r_fortran.split('\n'))
-            r_loops = len(FindNodes(Loop).visit(r.body))
-            # Détection I/O via Intrinsics (READ, WRITE, PRINT)
-            io_nodes = [n for n in FindNodes(ir.Intrinsic).visit(r.body) 
-                        if any(kw in n.text.upper() for kw in ["READ", "WRITE", "PRINT"])]
-            r_io = len(io_nodes)
-            r_calls = [c.name.name if hasattr(c.name, 'name') else str(c.name) 
-                       for c in FindNodes(ir.CallStatement).visit(r.body)]
-            
-            project_report[r.name] = {
-                "lines": r_lines, "loops": r_loops, "io": r_io, "calls": r_calls
+        # --- GLOBAL SCHEMA EXTRACTION (NamedTuple) ---
+        print(f"  🧠 Extracting Global Schema (Params & State)...")
+        schema_prompt = f"""Analyze this Fortran file and define two sets of variables for a JAX implementation:
+1. `Params`: Static scalars, configuration, grid info (NX, DX, DT, etc.).
+2. `State`: Mutable arrays (U, V, VEL, etc.) that represent the physical state.
+
+File Initial Content:
+{source.to_fortran()[:8000]}
+
+Format return as JSON:
+{{ "params": ["NX", "NY", ...], "state": ["VELOCITY", "STRESS", ...] }}
+"""
+        schema = {"params": [], "state": []}
+        try:
+            rs = get_reasoning_llm().invoke([HumanMessage(content=schema_prompt)])
+            schema_raw = json.loads(_strip_markdown(rs.content))
+            schema = {
+                "params": sorted(list(set(schema_raw.get("params", [])))),
+                "state": sorted(list(set(schema_raw.get("state", []))))
             }
-            print(f"  {r.name:<20} | {r_lines:<6} | {r_loops:<6} | {r_io:<4} | {', '.join(r_calls[:3])}{'...' if len(r_calls)>3 else ''}")
+            print(f"  ✅ Schema: {len(schema['params'])} params, {len(schema['state'])} state vars")
+        except Exception as e:
+            print(f"  ⚠️ Schema extraction failed: {e}")
 
         # --- ISOLATION DE CHAQUE ROUTINE ---
         kernel_results = []
@@ -489,7 +490,8 @@ Requirements:
                 "unit_test_skeleton": test_skeleton,
                 "repro_passed": False,
                 "repro_max_abs": 0.0,
-                "repro_mean_rel": 0.0
+                "repro_mean_rel": 0.0,
+                "global_schema": schema
             })
 
         executed = state.get("executed_agents", [])
@@ -631,25 +633,24 @@ Respond in this exact format (no extra text):
 
 # ── Worker Agent Loop ──────────────────────────────────────────
 
-def translator_worker_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Agent Worker : Traduit un seul noyau Fortran en JAX."""
-    kernel = state["kernel"]
-    routine_name = kernel["routine_name"]
-    fortran_code = kernel["fortran_code"]
-    
-    print(f"  ⚙️  [Worker] Translating: {routine_name}")
-    
+def translator_worker_agent(state: TranslationState) -> TranslationState:
+    """Agent Worker : Traduit tous les noyaux Fortran en JAX séquentiellement."""
     from local_code_agent.llm import get_translator_llm
     llm = get_translator_llm()
     
-    system_prompt = """You are Mistral, an elite AI specialized in translating legacy Fortran HPC codes into highly optimized JAX (XLA) programs.
+    schema = state.get("kernel_results", [{}])[0].get("global_schema", {"params": [], "state": []})
     
-    ### ARCHITECTURE JAX (MANDATORY)
-    1. Organize the code using two specific NamedTuples:
-       - `Params(NamedTuple)`: For all static constants, grid parameters, and configuration (these will be JIT-static).
-       - `State(NamedTuple)`: For all mutable physical arrays (these will be JIT-dynamic).
+    system_prompt = f"""You are Mistral, an elite AI specialized in translating legacy Fortran HPC codes into highly optimized JAX (XLA) programs.
+    
+    ### CONSOLIDATED ARCHITECTURE (MANDATORY)
+    We are using a single, module-level NamedTuple structure for ALL routines:
+    - `Params(NamedTuple)` containing: {schema['params']}
+    - `State(NamedTuple)` containing: {schema['state']}
+    
+    1. DO NOT redefine these NamedTuples in your code. Assume they are already defined globally.
     2. The main computation function MUST take `(params, state)` as its primary arguments.
-    3. Use `@jax.jit(static_argnames=('params',))` for performance.
+    3. Access variables as `params.NX`, `state.VELOCITY`, etc.
+    4. Use `@jax.jit(static_argnames=('params',))` for performance.
 
     ### LE TABLEAU DE CHASSE (SCIENTIFIC RULES)
     - INDEXATION : Convertir du 1-based (Fortran) vers le 0-based (JAX). Utiliser le slicing. Attention au "Silent Clamping" de XLA : ne jamais autoriser de débordement d'index. Padder les tableaux si nécessaire.
@@ -660,101 +661,93 @@ def translator_worker_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     - TAILLES DE TABLEAUX : XLA exige des dimensions statiques. Pré-allouer les tableaux à leur taille maximale et utiliser des masques si nécessaire.
     """
 
-    prompt = f"""Translate this Fortran routine into high-performance JAX using the NamedTuple (Params, State) architecture.
-    Routine: {routine_name}
+    results = []
+    # On itère séquentiellement sur les noyaux (Stabilisation Graphe)
+    kernels_to_process = [k for k in state.get("kernel_results", []) if k.get("status") == "pending"]
+    
+    for kernel in kernels_to_process:
+        routine_name = kernel["routine_name"]
+        fortran_code = kernel["fortran_code"]
+        print(f"  ⚙️  [Worker] Translating: {routine_name}")
 
-    Fortran Code (with XLA Hints):
-    {fortran_code}
+        prompt = f"""Translate this Fortran routine into high-performance JAX using the NamedTuple (Params, State) architecture.
+        Routine: {routine_name}
+        Fortran Code (with XLA Hints):
+        {fortran_code}
 
-    IMPORTANT: Definition of Params and State NamedTuples MUST be included inside the generated code block.
-    Return ONLY the JAX Python code enclosed in a ```python``` markdown block.
-    """
-    try:
-        resp = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=prompt)
-        ])
-        jax_code = _strip_markdown(resp.content)
-        # Validation syntax
-        vr = _validate_jax(jax_code, label=f"worker_{routine_name}")
-        
-        # --- PARALLEL REPRODUCIBILITY CHECK ---
-        repro_passed = False
-        repro_max_abs = 0.0
-        repro_mean_rel = 0.0
+        IMPORTANT: Definition of Params and State NamedTuples MUST be included inside the generated code block.
+        Return ONLY the JAX Python code enclosed in a ```python``` markdown block.
+        """
         try:
-            # On utilise un dossier temporaire dédié pour éviter les collisions
-            with tempfile.TemporaryDirectory() as tmpdir:
-                td = Path(tmpdir)
-                f_wrapper_path = td / "wrapper.f90"
-                f_wrapper_path.write_text(kernel["fortran_wrapper"])
-                f_src_path = td / "kernel.f90"
-                f_src_path.write_text(fortran_code)
-                j_src_path = td / "jax_kernel.py"
-                j_src_path.write_text(jax_code)
-                t_src_path = td / "test_repro.py"
-                t_src_path.write_text(kernel["unit_test_skeleton"])
-                
-                # Compilation (Injection PATH Homebrew Mac)
-                compiler_bin = _fortran_compiler() or "gfortran"
-                env = os.environ.copy()
-                env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
-                
-                so_path = td / f"lib{routine_name.lower()}.so"
-                comp_res = subprocess.run(
-                    [compiler_bin, "-O3", "-shared", "-fPIC", str(f_wrapper_path), str(f_src_path), "-o", str(so_path)],
-                    capture_output=True, text=True, timeout=30, env=env
-                )
-                if comp_res.returncode == 0:
-                    # Run Pytest (use venv path)
+            resp = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=prompt)
+            ])
+            jax_code = _strip_markdown(resp.content)
+            # Validation syntax
+            vr = _validate_jax(jax_code, label=f"worker_{routine_name}")
+            
+            # --- NUMERICAL REPRODUCIBILITY CHECK ---
+            repro_passed = False
+            repro_max_abs = 0.0
+            repro_mean_rel = 0.0
+            try:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    td = Path(tmpdir)
+                    f_wrapper_path = td / "wrapper.f90"
+                    f_wrapper_path.write_text(kernel["fortran_wrapper"])
+                    f_src_path = td / "kernel.f90"
+                    f_src_path.write_text(fortran_code)
+                    j_src_path = td / "jax_kernel.py"
+                    j_src_path.write_text(jax_code)
+                    t_src_path = td / "test_repro.py"
+                    t_src_path.write_text(kernel["unit_test_skeleton"])
+                    
+                    # Compilation
+                    compiler_bin = _fortran_compiler() or "gfortran"
+                    env = os.environ.copy()
+                    env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
+                    so_path = td / f"lib{routine_name.lower()}.so"
+                    
+                    subprocess.run(
+                        [compiler_bin, "-O3", "-shared", "-fPIC", str(f_wrapper_path), str(f_src_path), "-o", str(so_path)],
+                        capture_output=True, env=env, timeout=30
+                    )
+                    
+                    # Pytest
                     pytest_bin = os.path.join(os.getcwd(), ".venv/bin/pytest")
                     pytest_env = env.copy()
                     pytest_env["PYTHONPATH"] = f"{td}:{pytest_env.get('PYTHONPATH', '')}"
                     test_res = subprocess.run(
-                        [pytest_bin, "-s", str(t_src_path)], # -s pour capturer le print
+                        [pytest_bin, "-s", str(t_src_path)],
                         capture_output=True, text=True, timeout=60, env=pytest_env
                     )
                     repro_passed = (test_res.returncode == 0)
-                    
-                    # Extraction des métriques via Regex
-                    output = test_res.stdout + test_res.stderr
-                    m = re.search(r"NUMERICAL_METRICS: max_abs=([0-9\.eE\-\+]+), mean_rel=([0-9\.eE\-\+]+)", output)
+                    m = re.search(r"NUMERICAL_METRICS: max_abs=([0-9\.eE\-\+]+), mean_rel=([0-9\.eE\-\+]+)", test_res.stdout + test_res.stderr)
                     if m:
-                        repro_max_abs = float(m.group(1))
-                        repro_mean_rel = float(m.group(2))
-        except Exception as e:
-            print(f"  ⚠️  Parallel repro failed for {routine_name}: {e}")
+                        repro_max_abs, repro_mean_rel = float(m.group(1)), float(m.group(2))
+            except Exception as e:
+                print(f"  ⚠️  Repro failed for {routine_name}: {e}")
 
-        status = "success" if vr["syntax"] else "error"
-        return {"kernel_results": [{
-            "routine_name": routine_name,
-            "fortran_code": fortran_code,
-            "jax_code": jax_code,
-            "status": status,
-            "error_log": vr.get("error", ""),
-            "fortran_wrapper": kernel["fortran_wrapper"],
-            "unit_test_skeleton": kernel["unit_test_skeleton"],
-            "repro_passed": repro_passed,
-            "repro_max_abs": repro_max_abs,
-            "repro_mean_rel": repro_mean_rel
-        }]}
-    except Exception as e:
-        return {"kernel_results": [{
-            "routine_name": routine_name,
-            "fortran_code": fortran_code,
-            "jax_code": "",
-            "status": "error",
-            "error_log": str(e),
-            "fortran_wrapper": kernel.get("fortran_wrapper", ""),
-            "unit_test_skeleton": kernel.get("unit_test_skeleton", ""),
-            "repro_passed": False,
-            "repro_max_abs": 0.0,
-            "repro_mean_rel": 0.0
-        }]}
+                results.append({
+                    **kernel,
+                    "jax_code": jax_code,
+                    "status": "success" if vr["syntax"] else "error",
+                    "error_log": vr.get("error", ""),
+                    "repro_passed": repro_passed,
+                    "repro_max_abs": repro_max_abs,
+                    "repro_mean_rel": repro_mean_rel
+                })
+            except Exception as e:
+                results.append({**kernel, "status": "error", "error_log": str(e)})
+
+    executed = state.get("executed_agents", [])
+    executed.append("translator")
+    return {"kernel_results": results, "executed_agents": executed}
 
 def dispatcher_agent(state: TranslationState):
-    """Dispatch chaque kernel vers un worker parallèle."""
-    return [Send("translator", {"kernel": k}) for k in state.get("kernel_results", [])]
+    """Dispatch chaque kernel vers un worker (séquentiel pour stabilisation)."""
+    return "translator"
 
 def consolidator_agent(state: TranslationState) -> TranslationState:
     """Consolide tous les résultats des workers dans un module Python structuré."""
@@ -762,20 +755,35 @@ def consolidator_agent(state: TranslationState) -> TranslationState:
     print(f"  🧱 [Consolidator Agent] Building Structured JAX Module")
     print(SEP)
     
+    # Récupération du schéma global (extrait par le parser)
+    kernels_valid = [k for k in state.get("kernel_results", []) if "global_schema" in k]
+    schema = kernels_valid[0].get("global_schema", {"params": [], "state": []}) if kernels_valid else {"params": [], "state": []}
+    
+    class_params = "class Params(NamedTuple):\n"
+    if schema["params"]:
+        for p in schema["params"]:
+            class_params += f"    {p}: Any\n"
+    else:
+        class_params += "    pass\n"
+
+    class_state = "class State(NamedTuple):\n"
+    if schema["state"]:
+        for s in schema["state"]:
+            class_state += f"    {s}: Any\n"
+    else:
+        class_state += "    pass\n"
+
     header = f"""\"\"\"
-JAX Implementation of {state.get('fortran_filepath', 'Fortran Kernel')}
-Automatically generated by TotalEnergies Fortran2JAX Pipeline.
+🚀 Module JAX Consolidé
+Structure unifiée de type NamedTuple pour tous les noyaux.
 \"\"\"
 import jax
 import jax.numpy as jnp
 from jax import lax, vmap, jit
 from typing import NamedTuple, Any
 
-# --- Global State Definition ---
-class GlobalState(NamedTuple):
-    \"\"\"Container for Shared Variables, COMMON blocks and SAVE attributes.\"\"\"
-    # TODO: Fill with specific metadata if available
-    metadata: dict = {{}}
+{class_params}
+{class_state}
 
 """
     
@@ -1375,7 +1383,8 @@ workflow.add_node("surrogate",      surrogate_fno_agent)
 workflow.set_entry_point("init")
 workflow.add_edge("init",            "parser")
 workflow.add_edge("parser",          "explainer")
-workflow.add_conditional_edges("explainer", dispatcher_agent, ["translator"])
+workflow.add_edge("explainer",          "dispatcher")
+workflow.add_edge("dispatcher",         "translator")
 workflow.add_edge("translator",      "consolidator")
 workflow.add_edge("consolidator",    "ide_interaction")
 workflow.add_edge("ide_interaction", "halo_exchange")
