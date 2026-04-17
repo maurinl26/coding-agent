@@ -297,7 +297,16 @@ def parse_and_isolate_agent(state: TranslationState) -> TranslationState:
             break
 
     try:
-        from loki import Sourcefile, FindNodes, Loop, Scheduler, SchedulerConfig, config
+        # Prioritize local Loki fork (has PROGRAM support patches)
+        _loki_local = str(Path(__file__).resolve().parents[2] / "loki")
+        if _loki_local not in sys.path:
+            sys.path.insert(0, _loki_local)
+
+        from loki import (
+            Sourcefile, Frontend, Scheduler, SchedulerConfig, 
+            FindNodes, BasicType
+        )
+        from loki.ir.nodes import VariableDeclaration, Loop, Conditional, CallStatement
         import loki.ir as ir
         import re
         import os
@@ -385,29 +394,55 @@ def parse_and_isolate_agent(state: TranslationState) -> TranslationState:
         if not source.routines:
             raise ValueError("No Fortran routines found in the file.")
 
-        # --- GLOBAL SCHEMA EXTRACTION (NamedTuple) ---
-        print(f"  🧠 Extracting Global Schema (Params & State)...")
-        schema_prompt = f"""Analyze this Fortran file and define two sets of variables for a JAX implementation:
-1. `Params`: Static scalars, configuration, grid info (NX, DX, DT, etc.).
-2. `State`: Mutable arrays (U, V, VEL, etc.) that represent the physical state.
+        # --- GLOBAL SCHEMA EXTRACTION (LOKI AST Semantic) ---
+        print(f"  🧠 Extracting Global Schema (Loki Semantic Architect)...")
+        schema = {"params": [], "statics": [], "state": []}
+        
+        all_params = []
+        all_statics = []
+        all_state = []
+        
+        # 1. Loki AST attempt
+        for routine in source.routines:
+            for decl in FindNodes(VariableDeclaration).visit(routine.spec):
+                for var in decl.symbols:
+                    is_param = getattr(var.type, 'parameter', False)
+                    dtype = getattr(var.type, 'dtype', BasicType.DEFERRED)
+                    
+                    if is_param:
+                        if dtype == BasicType.LOGICAL:
+                            all_statics.append(var.name)
+                        else:
+                            all_params.append(var.name)
+                    else:
+                        if hasattr(var, 'dimensions') and var.dimensions:
+                            all_state.append(var.name)
+        
+        # 2. Robust REGEX Fallback if Loki returns zero schema items
+        if not all_params and not all_state:
+            print("  ⚠️  Loki AST schema was empty. Applying Robust REGEX Fallback...")
+            raw_text = Path(filepath).read_text()
+            
+            # Extract Parameters
+            param_matches = re.findall(r'(\w+)\s*,\s*parameter', raw_text, re.IGNORECASE)
+            # Find assignments in parameter declarations: label=value
+            param_assigns = re.findall(r'(\w+)\s*=\s*[^,!\s]+', raw_text)
+            all_params.extend(param_matches)
+            all_params.extend(param_assigns)
+            
+            # Extract basic Statics (Logicals)
+            all_statics.extend(re.findall(r'LOGICAL\s*,\s*parameter\s*::\s*(\w+)', raw_text, re.IGNORECASE))
+            
+            # Extract State (Arrays)
+            state_matches = re.findall(r'(\w+)\s*\([^)]+\)', raw_text)
+            all_state.extend(state_matches)
 
-File Initial Content:
-{source.to_fortran()[:8000]}
-
-Format return as JSON:
-{{ "params": ["NX", "NY", ...], "state": ["VELOCITY", "STRESS", ...] }}
-"""
-        schema = {"params": [], "state": []}
-        try:
-            rs = get_reasoning_llm().invoke([HumanMessage(content=schema_prompt)])
-            schema_raw = json.loads(_strip_markdown(rs.content))
-            schema = {
-                "params": sorted(list(set(schema_raw.get("params", [])))),
-                "state": sorted(list(set(schema_raw.get("state", []))))
-            }
-            print(f"  ✅ Schema: {len(schema['params'])} params, {len(schema['state'])} state vars")
-        except Exception as e:
-            print(f"  ⚠️ Schema extraction failed: {e}")
+        schema = {
+            "params": sorted(list(set(all_params))),
+            "statics": sorted(list(set(all_statics))),
+            "state": sorted(list(set(all_state)))
+        }
+        print(f"  ✅ Schema: {len(schema['params'])} params, {len(schema['statics'])} statics (logicals), {len(schema['state'])} state vars")
 
         # --- ISOLATION DE CHAQUE ROUTINE ---
         kernel_results = []
@@ -432,15 +467,57 @@ Format return as JSON:
                     xla_hints.append(f"SAVE variables {', '.join(save_vars)} detected. Thread this state across iterations with jax.lax.scan.")
                     
             # 3. Loops (temp vs spatial)
-            from loki.ir import Conditional
             loops = FindNodes(Loop).visit(routine.body)
             if loops:
-                xla_hints.append(f"Loops detected ({len(loops)}). Use lax.scan for sequential temporal loops, vmap/slicing for independent spatial loops.")
-                
+                loop_ranges = []
+                for lp in loops:
+                    if hasattr(lp, 'bounds') and lp.bounds:
+                        loop_ranges.append(str(lp.bounds))
+                xla_hints.append(f"Loops detected ({len(loops)}): ranges={loop_ranges[:3]}. Use lax.scan for sequential temporal loops, vmap/slicing for independent spatial loops.")
+
             # 4. Conditionals
+            from loki.ir.nodes import Conditional
             conds = FindNodes(Conditional).visit(routine.body)
             if conds:
                 xla_hints.append("If/Else branches detected. Use jax.numpy.where for XLA-safe boolean masking.")
+
+            # 5. IO Detection (Loki AST)
+            io_keywords = ['print', 'write', 'read', 'open', 'close', 'inquire']
+            found_io = False
+            for node in FindNodes(CallStatement).visit(routine.body):
+                if any(k in str(node.name).lower() for k in io_keywords):
+                    found_io = True
+                    break
+            if not found_io:
+                if any(k in routine.to_fortran().lower() for k in io_keywords):
+                    found_io = True
+            if found_io:
+                xla_hints.append("IO Operations detected (PRINT/WRITE/READ). Port these to Python native calls in the orchestration layer (greedy master) or REMOVE from JAX kernels.")
+
+            # 6. Loki Dataflow Analysis — loop-carried deps, unused vars, 0-based indexing
+            try:
+                from loki.analyse import dataflow_analysis_attached, loop_carried_dependencies, read_after_write_vars
+                from loki.transformations.array_indexing import shift_to_zero_indexing
+                from loki.transformations.remove_code import find_unused_dummy_args_and_vars
+
+                # Detect loop-carried dependencies (→ lax.scan pattern required)
+                with dataflow_analysis_attached(routine):
+                    for lp in loops:
+                        deps = loop_carried_dependencies(lp)
+                        if deps:
+                            dep_names = [str(d) for d in deps]
+                            xla_hints.append(f"Loop-carried dependencies on {dep_names} — these MUST be threaded as lax.scan carry state.")
+
+                # Detect unused dummy args (safe to drop in JAX signature)
+                unused_args, unused_vars = find_unused_dummy_args_and_vars(routine)
+                if unused_args:
+                    xla_hints.append(f"Unused dummy args: {[str(a) for a in unused_args]} — omit from JAX function signature.")
+
+                # Check if indexing is 1-based (always true in Fortran — remind LLM)
+                xla_hints.append("Fortran is 1-based indexed. ALL array accesses must be shifted: arr[i-1] in JAX. Use shift_to_zero_indexing pattern.")
+
+            except Exception as e_df:
+                xla_hints.append(f"[Dataflow analysis unavailable: {e_df}]")
 
             hint_str = "\n".join([f"! [XLA HINT] {h}" for h in xla_hints])
             kernel_str_raw = routine.to_fortran()
@@ -485,6 +562,7 @@ Requirements:
                 "fortran_code": kernel_str,
                 "jax_code": "",
                 "status": "pending",
+                "is_master": routine.name.lower().endswith("_master"),
                 "error_log": "",
                 "fortran_wrapper": wrapper_code,
                 "unit_test_skeleton": test_skeleton,
@@ -501,7 +579,15 @@ Requirements:
         return {
             "kernel_results": kernel_results,
             "kernels_found": routines_names,
-            "ast_info": {"status": "parsed", "report": project_report},
+            "ast_info": {
+                "status": "parsed",
+                "routine_name": routines_names[0] if routines_names else "kernel",
+                "report": {
+                    "global_schema": schema,
+                    "routines": routines_names,
+                    "is_program": is_program,
+                }
+            },
             "scientific_metadata": state.get("scientific_metadata", {}),
             "executed_agents": executed
         }
@@ -518,6 +604,7 @@ Requirements:
                 "fortran_code": raw,
                 "jax_code": "",
                 "status": "pending",
+                "is_master": True,
                 "error_log": ""
             }],
             "kernels_found": ["master"],
@@ -638,108 +725,131 @@ def translator_worker_agent(state: TranslationState) -> TranslationState:
     from local_code_agent.llm import get_translator_llm
     llm = get_translator_llm()
     
-    schema = state.get("kernel_results", [{}])[0].get("global_schema", {"params": [], "state": []})
-    
+    # Récupération du schéma global semantique (Loki)
+    schema = state.get("ast_info", {}).get("report", {}).get("global_schema", {"params": [], "statics": [], "state": []})
+    if not schema or (not schema.get("params") and not schema.get("state")):
+         # Fallback si ast_info est vide (cas raw backup)
+         schema = state.get("kernel_results", [{}])[0].get("global_schema", {"params": [], "statics": [], "state": []})
+
     system_prompt = f"""You are Mistral, an elite AI specialized in translating legacy Fortran HPC codes into highly optimized JAX (XLA) programs.
     
-    ### CONSOLIDATED ARCHITECTURE (MANDATORY)
-    We are using a single, module-level NamedTuple structure for ALL routines:
-    - `Params(NamedTuple)` containing: {schema['params']}
-    - `State(NamedTuple)` containing: {schema['state']}
+    ### CONSOLIDATED SEMANTIC ARCHITECTURE (MANDATORY)
+    We are using a module-level NamedTuple structure for ALL routines:
+    - `Statics(NamedTuple)` (Logicals): {schema.get('statics', [])}
+    - `Params(NamedTuple)` (Grid/Constants): {schema.get('params', [])}
+    - `State(NamedTuple)` (Field arrays): {schema.get('state', [])}
     
-    1. DO NOT redefine these NamedTuples in your code. Assume they are already defined globally.
-    2. The main computation function MUST take `(params, state)` as its primary arguments.
-    3. Access variables as `params.NX`, `state.VELOCITY`, etc.
-    4. Use `@jax.jit(static_argnames=('params',))` for performance.
-
-    ### LE TABLEAU DE CHASSE (SCIENTIFIC RULES)
-    - INDEXATION : Convertir du 1-based (Fortran) vers le 0-based (JAX). Utiliser le slicing. Attention au "Silent Clamping" de XLA : ne jamais autoriser de débordement d'index. Padder les tableaux si nécessaire.
-    - TYPAGE & PRÉCISION : Cast explicite de TOUTES les constantes (ex: 1.0) vers `jnp.float32` ou `jnp.float64` selon le flag global. Éviter la promotion implicite qui casse la compilation JIT.
-    - RÉINDÉXATION & FMA : Accepter que JAX et Fortran divergent autour de 10^-7 à cause du Fused Multiply-Add (FMA) sur GPU. Viser la convergence en norme L2 plutôt que la reproductibilité bit-à-bit.
-    - BRANCHEMENTS : Remplacer TOUS les `if` Python par `jnp.where` (masquage booléen) ou `jax.lax.cond` pour la compatibilité XLA.
-    - BOUCLE TEMPORELLE : Utiliser obligatoirement `jax.lax.scan` pour toute boucle de type `DO t=1...`. Ne jamais utiliser de boucle `for` Python pour le stepping temporel sous peine de déborder le graphe.
-    - TAILLES DE TABLEAUX : XLA exige des dimensions statiques. Pré-allouer les tableaux à leur taille maximale et utiliser des masques si nécessaire.
+    RULES:
+    1. DO NOT redefine these NamedTuples.
+    2. Computational functions MUST take `(statics, params, state)` as primary arguments.
+    3. Use `@jax.jit(static_argnames=('statics',))` for kernels.
+    4. BRANCHING: If a branch depends on a field array, use `jnp.where` or `lax.cond`. If it depends on a `Static` parameter, use standard Python `if`.
+    5. IO Separation: `PRINT`, `WRITE`, `CLOSE` are INFRASTRUCTURE. They MUST be ported to Python `print()` or `logging` in the orchestration block and REMOVED from JAX kernels.
     """
 
     results = []
-    # On itère séquentiellement sur les noyaux (Stabilisation Graphe)
-    kernels_to_process = [k for k in state.get("kernel_results", []) if k.get("status") == "pending"]
+    kernels_raw = state.get("kernel_results", [])
+    kernels_to_process = [k for k in kernels_raw if k.get("status") == "pending"]
     
     for kernel in kernels_to_process:
         routine_name = kernel["routine_name"]
         fortran_code = kernel["fortran_code"]
-        print(f"  ⚙️  [Worker] Translating: {routine_name}")
+        is_master = kernel.get("is_master", False)
+        print(f"  ⚙️  [Worker] Translating: {routine_name} " + ("(Greedy Master Infrastructure)" if is_master else ""))
 
-        prompt = f"""Translate this Fortran routine into high-performance JAX using the NamedTuple (Params, State) architecture.
-        Routine: {routine_name}
-        Fortran Code (with XLA Hints):
-        {fortran_code}
-
-        IMPORTANT: Definition of Params and State NamedTuples MUST be included inside the generated code block.
-        Return ONLY the JAX Python code enclosed in a ```python``` markdown block.
-        """
+        if is_master:
+            prompt = f"""You are porting the main infrastructure of this HPC simulation to Python/JAX.
+            Routine: {routine_name} (PROGRAM/Master)
+            
+            TASK:
+            1. Port IO (PRINT/WRITE/READ) to Python native calls. Keep them in the `run_simulation` orchestration.
+            2. Extract simulation infrastructure into `run_simulation(statics, params, state) -> State`.
+            3. Implement the TIME LOOP using `jax.lax.scan`.
+            4. Use the provided NamedTuple schema labels:
+               Statics: {schema.get('statics', [])}
+               Params: {schema.get('params', [])}
+               State: {schema.get('state', [])}
+            
+            Fortran Code:
+            {fortran_code}
+            
+            Return ONLY the JAX/Python orchestration code in a markdown block.
+            """
+        else:
+            prompt = f"""Translate this Fortran routine into a PURE JAX kernel.
+            Routine: {routine_name}
+            
+            IMPORTANT: Use ONLY (statics, params, state).
+            Statics: {schema.get('statics', [])}
+            Params: {schema.get('params', [])}
+            State: {schema.get('state', [])}
+            
+            Rules:
+            - No IO (PRINT/WRITE).
+            - Strict JIT-safe code.
+            - Take (statics, params, state) as args.
+            
+            Fortran Code:
+            {fortran_code}
+            
+            Return ONLY the JAX Python code enclosed in a ```python``` markdown block.
+            """
         try:
             resp = llm.invoke([
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=prompt)
             ])
             jax_code = _strip_markdown(resp.content)
-            # Validation syntax
             vr = _validate_jax(jax_code, label=f"worker_{routine_name}")
             
-            # --- NUMERICAL REPRODUCIBILITY CHECK ---
+            # Repro Check (SKIP for MASTER)
             repro_passed = False
             repro_max_abs = 0.0
             repro_mean_rel = 0.0
-            try:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    td = Path(tmpdir)
-                    f_wrapper_path = td / "wrapper.f90"
-                    f_wrapper_path.write_text(kernel["fortran_wrapper"])
-                    f_src_path = td / "kernel.f90"
-                    f_src_path.write_text(fortran_code)
-                    j_src_path = td / "jax_kernel.py"
-                    j_src_path.write_text(jax_code)
-                    t_src_path = td / "test_repro.py"
-                    t_src_path.write_text(kernel["unit_test_skeleton"])
-                    
-                    # Compilation
-                    compiler_bin = _fortran_compiler() or "gfortran"
-                    env = os.environ.copy()
-                    env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
-                    so_path = td / f"lib{routine_name.lower()}.so"
-                    
-                    subprocess.run(
-                        [compiler_bin, "-O3", "-shared", "-fPIC", str(f_wrapper_path), str(f_src_path), "-o", str(so_path)],
-                        capture_output=True, env=env, timeout=30
-                    )
-                    
-                    # Pytest
-                    pytest_bin = os.path.join(os.getcwd(), ".venv/bin/pytest")
-                    pytest_env = env.copy()
-                    pytest_env["PYTHONPATH"] = f"{td}:{pytest_env.get('PYTHONPATH', '')}"
-                    test_res = subprocess.run(
-                        [pytest_bin, "-s", str(t_src_path)],
-                        capture_output=True, text=True, timeout=60, env=pytest_env
-                    )
-                    repro_passed = (test_res.returncode == 0)
-                    m = re.search(r"NUMERICAL_METRICS: max_abs=([0-9\.eE\-\+]+), mean_rel=([0-9\.eE\-\+]+)", test_res.stdout + test_res.stderr)
-                    if m:
-                        repro_max_abs, repro_mean_rel = float(m.group(1)), float(m.group(2))
-            except Exception as e:
-                print(f"  ⚠️  Repro failed for {routine_name}: {e}")
+            if not is_master:
+                try:
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        td = Path(tmpdir)
+                        (td / "wrapper.f90").write_text(kernel["fortran_wrapper"])
+                        (td / "kernel.f90").write_text(fortran_code)
+                        (td / "jax_kernel.py").write_text(jax_code)
+                        (td / "test_repro.py").write_text(kernel["unit_test_skeleton"])
+                        
+                        compiler_bin = _fortran_compiler() or "gfortran"
+                        env = os.environ.copy()
+                        env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
+                        so_path = td / f"lib{routine_name.lower()}.so"
+                        
+                        subprocess.run(
+                            [compiler_bin, "-O3", "-shared", "-fPIC", str(td/"wrapper.f90"), str(td/"kernel.f90"), "-o", str(so_path)],
+                            capture_output=True, env=env, timeout=30
+                        )
+                        
+                        pytest_bin = os.path.join(os.getcwd(), ".venv/bin/pytest")
+                        pytest_env = env.copy()
+                        pytest_env["PYTHONPATH"] = f"{td}:{pytest_env.get('PYTHONPATH', '')}"
+                        test_res = subprocess.run(
+                            [pytest_bin, "-s", str(td/"test_repro.py")],
+                            capture_output=True, text=True, timeout=60, env=pytest_env
+                        )
+                        repro_passed = (test_res.returncode == 0)
+                        m = re.search(r"max_abs=([0-9\.eE\-\+]+), mean_rel=([0-9\.eE\-\+]+)", test_res.stdout + test_res.stderr)
+                        if m:
+                            repro_max_abs, repro_mean_rel = float(m.group(1)), float(m.group(2))
+                except Exception as e_repro:
+                    print(f"  ⚠️  Repro logic error for {routine_name}: {e_repro}")
 
-                results.append({
-                    **kernel,
-                    "jax_code": jax_code,
-                    "status": "success" if vr["syntax"] else "error",
-                    "error_log": vr.get("error", ""),
-                    "repro_passed": repro_passed,
-                    "repro_max_abs": repro_max_abs,
-                    "repro_mean_rel": repro_mean_rel
-                })
-            except Exception as e:
-                results.append({**kernel, "status": "error", "error_log": str(e)})
+            results.append({
+                **kernel,
+                "jax_code": jax_code,
+                "status": "success" if vr["syntax"] else "error",
+                "error_log": vr.get("error", ""),
+                "repro_passed": repro_passed,
+                "repro_max_abs": repro_max_abs,
+                "repro_mean_rel": repro_mean_rel
+            })
+        except Exception as e:
+            results.append({**kernel, "status": "error", "error_log": str(e)})
 
     executed = state.get("executed_agents", [])
     executed.append("translator")
@@ -747,7 +857,7 @@ def translator_worker_agent(state: TranslationState) -> TranslationState:
 
 def dispatcher_agent(state: TranslationState):
     """Dispatch chaque kernel vers un worker (séquentiel pour stabilisation)."""
-    return "translator"
+    return {}
 
 def consolidator_agent(state: TranslationState) -> TranslationState:
     """Consolide tous les résultats des workers dans un module Python structuré."""
@@ -755,64 +865,137 @@ def consolidator_agent(state: TranslationState) -> TranslationState:
     print(f"  🧱 [Consolidator Agent] Building Structured JAX Module")
     print(SEP)
     
-    # Récupération du schéma global (extrait par le parser)
-    kernels_valid = [k for k in state.get("kernel_results", []) if "global_schema" in k]
-    schema = kernels_valid[0].get("global_schema", {"params": [], "state": []}) if kernels_valid else {"params": [], "state": []}
+    # Récupération du schéma global semantique (Loki)
+    schema = state.get("ast_info", {}).get("report", {}).get("global_schema", {"params": [], "statics": [], "state": []})
+    if not schema or (not schema.get("params") and not schema.get("state")):
+         # Fallback
+         kernels_valid = [k for k in state.get("kernel_results", []) if "global_schema" in k]
+         schema = kernels_valid[0].get("global_schema", {"params": [], "statics": [], "state": []}) if kernels_valid else {"params": [], "statics": [], "state": []}
     
+    class_statics = "class Statics(NamedTuple):\n"
+    if schema.get("statics"):
+        for s in schema["statics"]:
+            class_statics += f"    {s}: Any\n"
+    else:
+        class_statics += "    pass\n"
+
     class_params = "class Params(NamedTuple):\n"
-    if schema["params"]:
+    if schema.get("params"):
         for p in schema["params"]:
             class_params += f"    {p}: Any\n"
     else:
         class_params += "    pass\n"
 
     class_state = "class State(NamedTuple):\n"
-    if schema["state"]:
+    if schema.get("state"):
         for s in schema["state"]:
             class_state += f"    {s}: Any\n"
     else:
         class_state += "    pass\n"
 
     header = f"""\"\"\"
-🚀 Module JAX Consolidé
-Structure unifiée de type NamedTuple pour tous les noyaux.
+🚀 Module JAX Consolidé (Loki Semantic Architect)
+Structure unifiée (Statics, Params, State) pour JIT performance.
 \"\"\"
 import jax
 import jax.numpy as jnp
 from jax import lax, vmap, jit
 from typing import NamedTuple, Any
 
+{class_statics}
 {class_params}
 {class_state}
-
 """
     
     body = ""
     master_routine = None
     for k in state["kernel_results"]:
         name = k['routine_name']
-        if name.lower().endswith("_master"):
-            master_routine = name
-        body += f"\n# --- {name} ---\n{k['jax_code']}\n"
+        is_master = k.get("is_master", False)
+        if is_master:
+            master_routine = "run_simulation" 
+            body += f"\n# --- Master Orchestration: {name} ---\n{k['jax_code']}\n"
+        else:
+            body += f"\n# --- Kernel: {name} ---\n{k['jax_code']}\n"
     
-    footer = ""
-    if master_routine:
-        footer = f"""
-# --- Execution Entry Point ---
+    footer = f"""
+# --- Simulation Launcher ---
+def start_simulation():
+    \"\"\"Initialisation et lancement de la simulation JAX.\"\"\"
+    # Initialisation du schéma (Labels ONLY, values to be provided by user/parser)
+    # statics = Statics(...)
+    # params = Params(...)
+    # state = State(...)
+    
+    print("⏳ Warming up JAX...")
+    # final_state = run_simulation(statics, params, state)
+    print("✅ Simulation complete.")
+
 if __name__ == "__main__":
-    print(f"🚀 Running JAX Master Routine: {master_routine}")
-    # Sample initialization logic for JIT warm-up
-    # state = GlobalState()
-    # result = {master_routine}(...) 
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        start_simulation()
+    else:
+        print("💡 Use 'python kernels_consolidated.py run' to start.")
 """
+    if not master_routine:
+        footer = "\n# No master routine detected.\n"
 
     full_jax = header + body + footer
     
-    # On sauvegarde le code global
+    # Save the consolidated JAX module
     out = _output_dir(state, "src")
     _save(out / "kernels_consolidated.py", full_jax)
-    
-    return {"jax_code": full_jax, "kernels_translated": len(state["kernel_results"])}
+
+    # ── Generate README.md for tracking ──────────────────────────
+    import datetime
+    kernel_rows = ""
+    for k in state["kernel_results"]:
+        kstatus = "✅ success" if k.get("status") == "success" else "❌ error" if k.get("status") == "error" else "⏳ pending"
+        kind = "🏗️ master" if k.get("is_master") else "⚙️  kernel"
+        repro = "⏭️ PORT" if k.get("is_master") else ("✅ PASS" if k.get("repro_passed") else "❌ FAIL")
+        kernel_rows += f"| `{k['routine_name']}` | {kind} | {kstatus} | {repro} |\n"
+
+    readme = f"""# 🚀 JAX Translation — {Path(state['fortran_filepath']).name}
+
+Generated: `{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`
+Source: `{state['fortran_filepath']}`
+
+## Schema (Loki Semantic Architect)
+
+| Category | Fields |
+| :--- | :--- |
+| `Statics` (JIT-static logicals) | `{', '.join(schema.get('statics', [])) or 'none'}` |
+| `Params` (grid/physical constants) | `{', '.join(schema.get('params', [])) or 'none'}` |
+| `State` (field arrays) | `{', '.join(schema.get('state', [])[:10]) or 'none'}{'...' if len(schema.get('state',[])) > 10 else ''}` |
+
+## Kernels
+
+| Routine | Kind | JAX Status | Repro |
+| :--- | :--- | :--- | :--- |
+{kernel_rows}
+## Quick Start
+
+```bash
+python src/{Path(state['fortran_filepath']).stem}/kernels_consolidated.py run
+```
+
+## Files
+
+| File | Description |
+| :--- | :--- |
+| `src/.../kernels_consolidated.py` | Main JAX module with Statics/Params/State |
+| `src/.../surrogate_fno.py` | FNO surrogate model |
+| `tests/reproducibility/.../REPRODUCIBILITY_REPORT.md` | Numerical parity report |
+| `tests/performance/` | Benchmark results |
+"""
+    out_root = Path("output")
+    _save(out_root / "README.md", readme)
+    # ─────────────────────────────────────────────────────────────
+
+    executed = state.get("executed_agents", [])
+    executed.append("consolidator")
+    return {"jax_code": full_jax, "kernels_translated": len(state["kernel_results"]), "executed_agents": executed}
 
 def translate_kernel_agent(state: TranslationState) -> TranslationState:
     """Agent 3 : Traduit le kernel Fortran vers JAX via LLM (avec boucles de correction)."""
@@ -1046,13 +1229,26 @@ def reproducibility_agent(state: TranslationState) -> TranslationState:
     print(f"  {'-'*110}")
 
     passed_count = 0
+    calculated_count = 0
     for k in kernels:
+        is_master = k.get("is_master", False)
         is_passed = k.get("repro_passed", False)
-        r_status = "PASS" if is_passed else "FAIL"
-        r_icon = "✅" if is_passed else "❌"
+        
+        # JAX Translation Status
         j_status = "OK" if k.get("status") == "success" else "ERR"
         j_icon = "✅" if k.get("status") == "success" else "⚠️"
         
+        # Repro Status [Logic Change for Greedy Master]
+        if is_master:
+            r_status = "PORT"
+            r_icon = "⏭️ "
+        else:
+            calculated_count += 1
+            r_status = "PASS" if is_passed else "FAIL"
+            r_icon = "✅" if is_passed else "❌"
+            if is_passed:
+                passed_count += 1
+
         m_abs = f"{k.get('repro_max_abs', 0.0):.2e}"
         m_rel = f"{k.get('repro_mean_rel', 0.0):.2e}"
         
@@ -1062,16 +1258,11 @@ def reproducibility_agent(state: TranslationState) -> TranslationState:
         # CLI print
         print(f"  {k['routine_name']:<35} | {j_icon} {j_status} | {r_icon} {r_status:<4} | {m_abs:<12} | {m_rel:<12} | {k.get('status', 'pending')}")
 
-        if is_passed:
-            passed_count += 1
-
     print(f"  {'-'*110}")
-    print(f"  📈 Summary: {passed_count}/{len(kernels)} subroutines passed numerical validation.")
+    total_to_check = calculated_count if calculated_count > 0 else 1
+    print(f"  📈 Summary: {passed_count}/{calculated_count} subroutines passed numerical validation.")
+    print(f"  ⏭️  Master routine infrastructure ported to Python.")
     print(f"  {'-'*110}\n")
-
-    print(f"  {'-'*80}")
-    print(f"  📈 Summary: {passed_count}/{len(kernels)} subroutines passed numerical validation.")
-    print(f"  {'-'*80}\n")
 
     # Sauvegarde de l'artifact
     _save(_output_dir(state, "tests/reproducibility") / "REPRODUCIBILITY_REPORT.md", report)

@@ -1,0 +1,947 @@
+Traceback (most recent call last):
+  File "/Users/loicmaurin/PycharmProjects/coding-agent/local_code_agent/agent/translation_graph.py", line 302, in parse_and_isolate_agent
+    if _loki_local not in sys.path:
+                          ^^^
+UnboundLocalError: cannot access local variable 'sys' where it is not associated with a value
+--- Starting Translation Pipeline for /Users/loicmaurin/PycharmProjects/seismic_cpml/analytical_solution_viscoelastic_2D_plane_strain_Carcione_correct_with_1_over_L.f90 ---
+
+────────────────────────────────────────────────────────────────
+  🏗️  [Init Agent] Initializing JAX Project Structure
+────────────────────────────────────────────────────────────────
+  ✅ Fortran compiler found : gfortran
+  💾 Saved → output/pyproject.toml
+  📁 Folder created : output/src
+  📁 Folder created : output/tests/reproducibility
+  📁 Folder created : output/tests/performance
+  📁 Folder created : output/fortran
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🔍 [Parsing Agent] Loki AST Parser + Project Discovery
+  📄 File  : /Users/loicmaurin/PycharmProjects/seismic_cpml/analytical_solution_viscoelastic_2D_plane_strain_Carcione_correct_with_1_over_L.f90
+────────────────────────────────────────────────────────────────
+  🏗️  Build file found: Makefile
+  ⚠️  Loki loading failed: cannot access local variable 'sys' where it is not associated with a value
+  🔄 Falling back to raw file.
+
+════════════════════════════════════════════════════════════════
+  🧠 [Explainer Agent] Scientific Context
+════════════════════════════════════════════════════════════════
+📌 Fonction   : Calcule la solution analytique du vecteur vitesse dans un milieu viscoélastique 2D sous une force verticale ponctuelle.
+🔬 Intérêt    : Valider des codes numériques (différences finies) en comparant avec une solution de référence en propagation d'ondes viscoélastiques.
+📚 Algorithme : Résolution des équations de l'élastodynamique viscoélastique (modèle de Zener) via transformée de Fourier et fonctions de Green (Carcione 1988).
+👤 Auteurs    : Dimitri Komatitsch (CNRS Marseille), Quentin Brissaud, Etienne Bachmann.
+📅 Année/Pub  : 1988 (Carcione et al., GJI, DOI:10.1111/j.1365-246X.1988.tb06693.x) / Modifié en 2017-2018.
+⚖️ Licence    : Non spécifiée (probablement liée au code SPECFEM, souvent sous CeCILL ou GPL).
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+It arose in the jnp.arange argument 'stop'
+The error occurred while tracing the function analytical_solution_kernel at <string>:46 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25,800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_spectrum at <string>:52 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_frequency_solution at <string>:44 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 801.0, 801.0
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+It arose in the jnp.arange argument 'stop'
+The error occurred while tracing the function analytical_solution_kernel at <string>:44 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Params.__new__() got an unexpected keyword argument 'x1'
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Attempted boolean conversion of traced array with shape bool[].
+The error occurred while tracing the function time_loop at <string>:170 for jit. This concrete value was not available in Python because it depends on the value of the argument icalculation.
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────<string>:297: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:298: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:299: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:300: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:301: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:302: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:303: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:203: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:204: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:205: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:206: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:207: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:208: UserWarning: Explicitly requested dtype float64 requested in zeros is not available, and will be truncated to dtype float32. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+<string>:75: UserWarning: Explicitly requested dtype complex128 requested in zeros is not available, and will be truncated to dtype complex64. To enable more dtypes, set the jax_enable_x64 configuration option or the JAX_ENABLE_X64 shell environment variable. See https://github.com/jax-ml/jax#current-gotchas for more.
+
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Attempted boolean conversion of traced array with shape bool[].
+The error occurred while tracing the function G1 at <string>:54 for jit. This concrete value was not available in Python because it depends on the value of the argument DO_NOT_COMPUTE_THE_NEAR_FIELD.
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_spectrum at <string>:44 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25, 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:45 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: while_loop body function carry input and carry output must have equal types, but they differ:
+
+  * the input carry component loop_carry[2][0] has type complex64[524289] but the corresponding output carry component has type complex64[], so the shapes do not match;
+
+  * the input carry component loop_carry[2][1] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match;
+
+  * the input carry component loop_carry[2][2] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match;
+  * the input carry component loop_carry[2][3] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match.
+
+Revise the function so that all output types match the corresponding input types.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Computing the viscoelastic solution
+  ⚠️  Exec warning (non-fatal) : ExecError: Attempted boolean conversion of traced array with shape bool[].
+The error occurred while tracing the function run_simulation at <string>:212 for jit. This concrete value was not available in Python because it depends on the value of the argument params.TURN_ATTENUATION_OFF.
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+'num' argument of jnp.linspace
+The error occurred while tracing the function compute_fourier_source at <string>:48 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25, 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: while_loop body function carry input and carry output must have equal types, but they differ:
+
+  * the input carry component loop_carry[2][0] has type complex64[524289] but the corresponding output carry component has type complex64[], so the shapes do not match;
+
+  * the input carry component loop_carry[2][1] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match;
+
+  * the input carry component loop_carry[2][2] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match;
+  * the input carry component loop_carry[2][3] has type float32[524289] but the corresponding output carry component has type float32[], so the shapes do not match.
+
+Revise the function so that all output types match the corresponding input types.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25, 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+It arose in the jnp.arange argument 'stop'
+The error occurred while tracing the function compute_analytical_solution at <string>:83 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Attempted boolean conversion of traced array with shape bool[].
+The error occurred while tracing the function compute_analytical_solution at <string>:86 for jit. This concrete value was not available in Python because it depends on the value of the argument icalculation.
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+
+────────────────────────────────────────────────────────────────
+  🧱 [Consolidator Agent] Building Structured JAX Module
+────────────────────────────────────────────────────────────────
+  💾 Saved → output/src/kernel/kernels_consolidated.py
+  💾 Saved → output/README.md
+
+────────────────────────────────────────────────────────────────
+  🔗 [GHEX Agent] HPC Parallelism Report
+────────────────────────────────────────────────────────────────
+  OpenMP directives :   0 found  → ⏭️  no OpenMP (skipped)
+  MPI calls         :   0 found  → ⏭️  no MPI (skipped)
+────────────────────────────────────────────────────────────────
+
+
+────────────────────────────────────────────────────────────────
+  🧪 [Reproducibility Agent] Generating Global Report
+────────────────────────────────────────────────────────────────
+
+  📊 [Reproducibility Results Dashboard]
+  --------------------------------------------------------------------------------------------------------------
+  Routine                             | JAX | Repro  | Max Abs      | Mean Rel     | Status
+  --------------------------------------------------------------------------------------------------------------
+  master                              | ✅ OK | ⏭️  PORT | 0.00e+00     | 0.00e+00     | success
+  --------------------------------------------------------------------------------------------------------------
+  📈 Summary: 0/0 subroutines passed numerical validation.
+  ⏭️  Master routine infrastructure ported to Python.
+  --------------------------------------------------------------------------------------------------------------
+
+  💾 Saved → output/tests/reproducibility/kernel/REPRODUCIBILITY_REPORT.md
+  📈 Detailed report saved: REPRODUCIBILITY_REPORT.md (0/1 passed)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+  ⚠️  Exec warning (non-fatal) : ExecError: 'Params' object has no attribute 'x1'
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:90 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: State.__new__() got an unexpected keyword argument 'time_vx'
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25, 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Attempted boolean conversion of traced array with shape bool[].
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:90 for jit. This concrete value was not available in Python because it depends on the value of the argument params.TURN_ATTENUATION_OFF.
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:112 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_analytical_solution at <string>:91 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 800.25,800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+Step in frequency: 0.000762939453125
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+It arose in the jnp.arange argument 'stop'
+The error occurred while tracing the function analytical_solution_kernel at <string>:48 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) =  800.25 800.25
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:116 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_source_spectrum at <string>:46 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+Receiver located in (x,z) = 801.0,801.0
+Computing the viscoelastic solution
+Computing the full solution, including the near-field term of the Green function
+  ⚠️  Exec warning (non-fatal) : ExecError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[]
+It arose in the jnp.arange argument 'stop'
+The error occurred while tracing the function compute_frequency_domain_solution at <string>:96 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(~int32[]),).
+If using `jit`, try using `static_argnums` or applying `jit` to smaller subfunctions.
+The error occurred while tracing the function compute_spectrum at <string>:40 for jit. This concrete value was not available in Python because it depends on the value of the argument params.nfreq.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+  ⚠️  Exec warning (non-fatal) : ExecError: 'Params' object has no attribute 'x1'
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+Force source located at the origin (0,0)
+  ⚠️  Exec warning (non-fatal) : ExecError: 'Params' object has no attribute 'x1'
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
+  ℹ️  jax.make_jaxpr   : no candidate function found (OK for module-level code)
+  ⚙️  [Worker] Translating: master (Greedy Master Infrastructure)
+  ⚠️  Exec warning (non-fatal) : ExecError: Jitted function has invalid argnames {'statics'} in static_argnames. Function does not take these args.
