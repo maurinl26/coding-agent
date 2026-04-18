@@ -112,6 +112,76 @@ def _gpu_compiler() -> str | None:
     return None
 
 
+def _gfortran_local_check(sources: List[Path]) -> tuple[bool, bool, str]:
+    """Vérifie la syntaxe Fortran en deux passes avec gfortran.
+
+    Flavor 1 — CPU (sans pragmas) :
+        Retire les directives !$acc et compile avec gfortran -O2 -fsyntax-only.
+        Valide la logique Fortran pure indépendamment d'OpenACC.
+
+    Flavor 2 — Avec pragmas :
+        Compile directement avec gfortran -fopenacc -fsyntax-only.
+        Valide que les directives OpenACC sont syntaxiquement correctes.
+
+    Returns:
+        (ok_no_acc, ok_with_acc, log)
+    """
+    gfc = shutil.which("gfortran")
+    if not gfc:
+        return False, False, "SKIP (gfortran): not found in PATH — brew install gcc"
+
+    logs: List[str] = [f"gfortran: {gfc}"]
+    ok_no_acc   = False
+    ok_with_acc = False
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+
+        # ── Flavor 1 : strip !$acc directives ────────────────────────────
+        stripped_srcs: List[str] = []
+        for src in sources:
+            if not src.exists():
+                continue
+            code = src.read_text(encoding="utf-8")
+            stripped = "\n".join(
+                line for line in code.splitlines()
+                if not re.match(r"^\s*!\$acc", line, re.IGNORECASE)
+            )
+            dst = tmp / ("stripped_" + src.name)
+            dst.write_text(stripped, encoding="utf-8")
+            stripped_srcs.append(str(dst))
+
+        cmd1 = [gfc, "-O2", "-fsyntax-only"] + stripped_srcs
+        logs.append(f"\nFlavor 1 (CPU, no !$acc): {' '.join(cmd1)}")
+        try:
+            r = subprocess.run(cmd1, capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                ok_no_acc = True
+                logs.append("  OK — Fortran logic is syntactically valid.")
+            else:
+                logs.append(f"  FAIL rc={r.returncode}")
+                logs.append("  " + (r.stderr or r.stdout)[:600])
+        except Exception as e:
+            logs.append(f"  ERROR: {e}")
+
+        # ── Flavor 2 : keep !$acc, use -fopenacc ─────────────────────────
+        all_srcs = [str(s) for s in sources if s.exists()]
+        cmd2 = [gfc, "-fopenacc", "-fsyntax-only"] + all_srcs
+        logs.append(f"\nFlavor 2 (with OpenACC): {' '.join(cmd2)}")
+        try:
+            r = subprocess.run(cmd2, capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                ok_with_acc = True
+                logs.append("  OK — OpenACC directives are syntactically valid.")
+            else:
+                logs.append(f"  FAIL rc={r.returncode}")
+                logs.append("  " + (r.stderr or r.stdout)[:600])
+        except Exception as e:
+            logs.append(f"  ERROR: {e}")
+
+    return ok_no_acc, ok_with_acc, "\n".join(logs)
+
+
 # ==========================================
 # 3. Agents (Nodes)
 # ==========================================
@@ -871,15 +941,17 @@ echo "  Watch: nvidia-smi dmon -d 1"
 
 
 def validation_agent(state: Phase1State) -> dict:
-    """Génère Makefile + compile_gpu.sh, puis tente la compilation GPU.
+    """Génère Makefile + compile_gpu.sh, puis valide le code généré en 4 niveaux.
 
-    Stratégie en 3 niveaux :
-      1. Compilation locale   — si nvfortran est dans le PATH
-      2. Compilation SSH      — si AZURE_GPU_HOST est défini dans l'env
-      3. Génération seulement — toujours : Makefile + compile_gpu.sh pour lancer manuellement
+    Niveau 0 — gfortran local (toujours, 2 flavors) :
+        Flavor 1 : compile sans !$acc (gfortran -O2 -fsyntax-only) → logique Fortran pure
+        Flavor 2 : compile avec OpenACC (gfortran -fopenacc -fsyntax-only) → pragmas valides
+    Niveau 1 — nvfortran local   : si nvfortran est dans le PATH
+    Niveau 2 — compilation SSH   : si AZURE_GPU_HOST est défini dans l'env
+    Niveau 3 — Génération seule  : toujours : Makefile + compile_gpu.sh pour lancement manuel
     """
     print(f"\n{SEP}")
-    print("  [Validation] GPU Compilation (local → SSH → manual fallback)")
+    print("  [Validation] gfortran syntax check → GPU compilation")
     print(SEP)
 
     out_dir     = Path("output").resolve()
@@ -903,6 +975,30 @@ def validation_agent(state: Phase1State) -> dict:
     os.chmod(out_dir / "compile_gpu.sh", 0o755)
     log_lines.append("OK: Makefile and compile_gpu.sh generated in output/")
     print("  Generated: output/Makefile  +  output/compile_gpu.sh")
+
+    # ── Level 0 : gfortran local syntax check (2 flavors) ────────────
+    print(f"\n  [Level 0] gfortran local syntax check ...")
+    sources_to_check: List[Path] = []
+    if (gpu_dir / module_file).exists():
+        sources_to_check.append(gpu_dir / module_file)
+    if driver_file and (gpu_dir / driver_file).exists():
+        sources_to_check.append(gpu_dir / driver_file)
+
+    if sources_to_check:
+        ok_no_acc, ok_with_acc, gfc_log = _gfortran_local_check(sources_to_check)
+        log_lines.append("\n=== gfortran local check ===")
+        log_lines.append(gfc_log)
+        flavor1_status = "OK" if ok_no_acc   else "FAIL"
+        flavor2_status = "OK" if ok_with_acc else "FAIL"
+        print(f"  Flavor 1 (CPU, no !$acc pragmas) : {flavor1_status}")
+        print(f"  Flavor 2 (gfortran -fopenacc)    : {flavor2_status}")
+        if not ok_no_acc:
+            print("  !! Fortran syntax errors — fix before GPU compilation")
+        elif not ok_with_acc:
+            print("  !! OpenACC directive errors (Fortran logic OK)")
+    else:
+        log_lines.append("SKIP (gfortran): source files not yet written")
+        print("  Level 0 skipped: no source files found")
 
     # ── Build command list ────────────────────────────────────────────
     def _compile_cmds(fc: str) -> List[List[str]]:
