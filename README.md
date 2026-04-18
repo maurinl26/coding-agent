@@ -1,157 +1,191 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/modelcontextprotocol/logo/main/mcp-logo.svg" width="120" alt="MCP Logo" />
-  <h1>🤖 Local Code Agent: Fortran ↔ JAX HPC</h1>
-  <p><strong>Proprietary Evaluation Agent for TotalEnergies Exascale translation. Scaled via LangGraph, Loki parsing, and GHEX MPI abstractions.</strong></p>
-  
+  <h1>Fortran → Fortran GPU + Cython</h1>
+  <p><strong>Agent de transformation Fortran scientifique vers GPU (OpenACC) avec wrapper Cython.<br>
+  Déployé sur Azure — Mistral-Large + LangGraph + Loki (loki-ifs).</strong></p>
+
   [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
   [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org)
   [![MCP](https://img.shields.io/badge/MCP-Ready-green.svg)](https://modelcontextprotocol.io/)
-  
-  <br />
 </div>
 
-## 🌟 Overview
+---
 
-**Local Code Agent SaaS** is a powerful, self-hosted AI coding assistant designed for enterprise environments where **code privacy is paramount**. 
+## Overview
 
-Instead of sending your proprietary source code to third-party cloud APIs (like OpenAI or Anthropic), this project spins up a **sandbox Docker container** that orchestrates a local instance of **Mistral NeMo 12B** via Ollama. It exposes its capabilities through a secure **FastMCP HTTP/SSE Server**, allowing seamless integration into modern IDEs supporting the Model Context Protocol (MCP).
+Pipeline multi-agents (LangGraph + Loki + Azure Mistral-Large) pour transformer du Fortran 90 scientifique en :
 
-### ✨ Features
-* **🔒 Zero Data Leakage**: Your code never leaves your infrastructure. 100% private.
-* **🧠 Mistral NeMo 12B**: State-of-the-art open-weights model quantization (4-bit) running smoothly on consumer hardware (e.g., Apple Silicon M-series with 16GB+ RAM).
-* **🔌 MCP Native**: Out-of-the-box compatibility with **Antigravity**, **Claude Desktop**, **VS Code** (via Roo Code / Cline), and **NeoVim**.
-* **🛡️ Hosted Workspace Ready**: Implements IDE-driven file readers—the AI requests the IDE to read/write files rather than having direct disk access, enabling advanced DevContainer isolation.
-* **🔑 API Key Security**: Built-in authentication middleware to protect your MCP server if exposed to the public internet.
+1. **Fortran GPU-ready** — annotations `PURE`/`ELEMENTAL` + pragmas OpenACC (`nvfortran -acc -gpu=cc80`)
+2. **Wrapper Cython** — interface Python/NumPy avec typed memoryviews (`np.float64[:,:]`) pour appel depuis Python
+
+Le pipeline utilise **Loki (loki-ifs / ECMWF)** pour l'analyse AST et la régénération du code Fortran, et **Azure Mistral-Large** pour les décisions sémantiques (PURE/ELEMENTAL, pragmas OpenACC, wrapper Cython).
 
 ---
 
-## 🏗️ Architecture
+## Architecture (Phase 1)
 
-```mermaid
-graph LR
-    A[IDE Client\nAntigravity/VSCode] -- "MCP Protocol\nHTTP/SSE" --> B(Reverse Proxy / Cloudflare)
-    B -- "Bearer Auth" --> C[Docker Sandbox\nFastMCP Server]
-    C -- "ReAct Agent\nLangChain" --> D[(Ollama\nMistral NeMo 12B)]
-    C -. "Tool Requests\n(read_file)" .-> A
+```
+init
+  ↓
+parser          Loki AST — isole les routines, extrait schéma (params / statics / state)
+  ↓
+pure_elemental  LLM — annote PURE/ELEMENTAL sur les kernels sans effets de bord
+  ↓
+openacc         LLM (Loki-informed) — !$acc parallel loop / !$acc data copyin/copyout
+  ↓
+cython_wrapper  LLM — génère .pyx + kernel_c.h + pyproject.toml build config
+  ↓
+validation      nvfortran -acc + Cython build_ext
+  ↓
+END             output/fortran_gpu/kernel_gpu.f90  +  output/cython/module.pyx
 ```
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
-### 1. Requirements
-* [Docker](https://www.docker.com/) & Docker Compose (or [OrbStack](https://orbstack.dev/) recommended for Mac)
-* Python 3.12+ (for local dev only)
+### Pré-requis
 
-### 2. Run the Infrastructure
+- Python 3.12+, [uv](https://github.com/astral-sh/uv)
+- Loki installé localement (`./loki`) — ECMWF Fortran AST toolkit
+- Azure Mistral-Large endpoint + API key (`.env`)
+- `nvfortran` (NVIDIA HPC SDK) pour la compilation GPU
 
-Clone the repository and set up your secure API key:
+### Installation
 
 ```bash
-git clone https://github.com/yourusername/coding-agent.git
-cd coding-agent
-
-# Set up your environment variables
 cp .env.example .env
-# Edit .env and set API_KEY=your_secure_password
+# Renseigner AZURE_MISTRAL_ENDPOINT et AZURE_MISTRAL_API_KEY
+
+uv sync
 ```
 
-Spin up the agent sandbox and Ollama:
+### Usage CLI
+
+```bash
+# Pipeline Phase 1 — Fortran → Fortran GPU + Cython
+uv run agent-gpu translate "/path/to/kernel.f90"
+
+# Pipeline Phase 2 (JAX, expérimental)
+uv run agent-pipeline translate "/path/to/kernel.f90"
+
+# Profil de performance
+uv run agent-profile "/path/to/kernel.f90"
+```
+
+### Usage MCP (IDE)
+
 ```bash
 docker compose up -d --build
 ```
-*(On the first run, the Mistral NeMo 12B model weighting ~7GB will be pulled automatically).*
 
-### 3. Connect your IDEs
-
-#### Antigravity Setup
-Open your `mcp_config.json` file in Antigravity (or use the visual MCP settings menu):
+Config MCP (Antigravity / VS Code / NeoVim) :
 
 ```json
 {
   "mcpServers": {
-    "fortran-jax-agent": {
-      "command": "node",
-      "args": ["-e", "console.log('Connecting via SSE')"],
+    "fortran-gpu-agent": {
       "transport": "sse",
       "url": "http://localhost:8000/sse",
-      "env": {
-        "Authorization": "Bearer your_secure_password"
-      }
+      "env": { "Authorization": "Bearer your_key" }
     }
   }
 }
 ```
 
-#### LazyVIM Setup
-To use these agents within LazyVIM, you need an MCP-compatible plugin such as `mcp.nvim` (or `neo-mcp`). Add the following to your Neovim Lua config (e.g., `lua/plugins/mcp.lua`):
+Outils MCP exposés : `translate_kernel_gpu`, `translate_kernel` (JAX), `ask_agent`, `profile_kernels`.
 
-```lua
-return {
-  {
-    "your-mcp/plugin.nvim",
-    opts = {
-      servers = {
-        fortran_jax = {
-          protocol = "sse",
-          endpoint = "http://localhost:8000/sse",
-          headers = {
-            ["Authorization"] = "Bearer your_secure_password",
-          }
-        }
-      }
-    }
-  }
-}
+---
+
+## Pipeline détaillé
+
+### 1. Parser (Loki AST)
+
+- Parse les fichiers `.f90` avec Loki (fparser + REGEX fallback)
+- Workaround pour les blocs `PROGRAM` (convertis en `SUBROUTINE`)
+- Extrait le schéma global : `params`, `statics` (LOGICAL PARAMETER), `state` (arrays)
+- Détecte par routine : `INTENT`, `SAVE`, boucles, I/O, dimensions de tableaux
+
+### 2. PURE / ELEMENTAL
+
+- LLM analyse chaque kernel : effets de bord, I/O, SAVE, COMMON
+- Ajoute `PURE` ou `ELEMENTAL` aux subroutines éligibles (sans I/O, sans SAVE)
+- Rend les `INTENT` explicites si nécessaire
+
+### 3. OpenACC Insert
+
+- Analyse Loki (boucles, INTENT IN/OUT/INOUT) fournie comme contexte au LLM
+- LLM génère `!$acc parallel loop`, `!$acc loop vector`, `!$acc data copyin/copyout`
+- Ajoute `!$acc routine seq` aux fonctions appelées depuis des kernels GPU
+- Sauvegardé dans `output/fortran_gpu/kernel_gpu.f90`
+
+### 4. Cython Wrapper
+
+- LLM génère `.pyx` à partir des signatures Loki (nom, intent, types, dimensions)
+- `cdef extern from "kernel_c.h"` + `cpdef` avec NumPy typed memoryviews
+- `np.asfortranarray()` pour le layout mémoire Fortran (column-major)
+- Génère `kernel_c.h` (C header iso_c_binding) et `pyproject.toml` (build config nvfortran)
+
+### 5. Validation
+
+- `nvfortran -acc -gpu=cc80 -shared -fPIC -o kernel_gpu.so kernel_gpu.f90`
+- `python setup.py build_ext --inplace` (Cython)
+- Rapport dans `output/fortran_gpu/validation.log`
+
+---
+
+## Sorties
+
 ```
-Reload LazyVIM. You can now execute MCP tools like `:MCPCall translate_kernel filepath=%` directly from an open `.f90` buffer!
+output/
+├── fortran_gpu/
+│   ├── kernel_pure.f90      PURE/ELEMENTAL annotated
+│   ├── kernel_gpu.f90       OpenACC pragmas
+│   ├── kernel_gpu.so        Compiled shared library (si nvfortran disponible)
+│   └── validation.log
+├── cython/
+│   ├── module.pyx           Cython wrapper
+│   └── kernel_c.h           C header (iso_c_binding)
+└── pyproject.toml           Build config (nvfortran + Cython)
+```
 
 ---
 
+## Infrastructure Azure
 
-
----
-
-## 🔬 Scientific Porting: Fortran to JAX (seismic_cpml)
-
-This repository hosts a dedicated multi-agent pipeline designed to automatically translate legacy Fortran 90 simulations (`seismic_cpml`) into high-performance JAX (Python) modules.
-
-### The Agent Workflow (LangGraph)
-1. **Parser Agent**: Extracts pure numerical kernels from `.f90` files using ECMWF `loki-ifs`. *(MPI and Halos are delegated down the line)*
-2. **Translation Agent (LLM)**: Analyzes Fortran syntax and maps it to specific JAX vectorization patterns (`jax.lax.scan`, `jax.vmap`).
-3. **Docstring Agent (LLM)**: Inspects the literature context, links the original `.f90` file, infers the research paper, and explicitly writes the exact mathematical formula being calculated inside the python docstrings.
-4. **Reproducibility Agent**: Generates `f2py` testing harnesses and validates the JAX output against the native Fortran binaries using `np.testing.assert_allclose`.
-5. **Performance Agent**: Evaluates generated JAX kernels against the Fortran execution on CPU vs GPU bounds.
-
-### 🧪 How to test the translation agents right now?
-
-We designed the pipeline to be exposed seamlessly either locally via your IDE, or automatically in GitHub PRs.
-
-**Method 1: Interactive IDE Testing (Antigravity/LazyVIM)**
-If you are connected to the FastMCP server, the agent exposes two direct tools:
-- `translate_kernel(filepath: str)`: Supply the absolute path to a Fortran file, and the multi-agent graph will process it and return the pure JAX code.
-- `profile_kernels(filepath: str)`: Compare an existing Fortran/JAX pair for performance benchmarks.
-
-**Method 2: Command Line Interface (CLI) via UV**
-We integrated standard pyproject configuration. Using the fast `uv` package manager, you can trigger individual agents natively:
+| VM | Type | Rôle |
+|----|------|------|
+| vm-orchestrator | Standard_D8s_v5 | LangGraph + Loki parsing |
+| vm-gpu-a100 | Standard_NC24ads_A100_v4 | nvfortran + Cython compilation |
 
 ```bash
-# Execute the full translation pipeline (Parser -> Translator -> Docstring -> Tests -> Perf)
-uv run agent-pipeline translate "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
-
-# Or trigger isolated agents directly:
-uv run agent-translate "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
-uv run agent-profile "/path/to/seismic_CPML_2D_isotropic_second_order.f90"
+cd infrastructure && ./deploy.sh
 ```
-
-**Method 3: GitHub Actions (Automated PRs)**
-The repository comes equipped with `.github/workflows/jax-translation.yml` and a specific `Dockerfile.ci`.
-Simply commit a new `.f90` file to a branch and push. The CI will trigger the extraction agents and automatically inject the `_jax.py` results into your PR.
 
 ---
 
-## 🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Roadmap
 
-## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+| Phase | Statut | Description |
+|-------|--------|-------------|
+| **Phase 1** | En cours | Fortran → Fortran GPU (PURE/ELEMENTAL + OpenACC + Cython) |
+| **Phase 2** | Planifié | Fortran GPU → JAX (réactiver `translation_graph.py`) |
+| **Phase 3** | Futur | Différentiation automatique (jax.grad) + surrogats FNO |
+
+---
+
+## Dépendances clés
+
+| Paquet | Rôle |
+|--------|------|
+| `langgraph`, `langchain-openai` | Orchestration multi-agents |
+| `loki @ file://./loki` | Parsing et transformation AST Fortran (ECMWF) |
+| `fastmcp` | Serveur MCP HTTP/SSE |
+| `Cython`, `numpy` | Wrapper Python/Fortran |
+| `nvfortran` (NVIDIA HPC SDK) | Compilation Fortran GPU (-acc -gpu=cc80) |
+| `jax[cpu]`, `flax`, `equinox` | Phase 2 — pipeline JAX (expérimental) |
+
+---
+
+## Licence
+
+Propriétaire — Usage TotalEnergies Exascale.

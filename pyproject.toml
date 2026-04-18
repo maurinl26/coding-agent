@@ -18,8 +18,9 @@ dependencies = [
     "fastmcp>=2.10.0",
     "langgraph>=0.2.0",
     "numpy",
+    "Cython>=3.0",
     "pytest",
-    # JAX — requis pour la validation make_jaxpr + les kernels générés
+    # JAX — Phase 2 pipeline (expérimental)
     "jax[cpu]>=0.4.0",
     "flax>=0.8.0",
     "equinox>=0.11.0",
@@ -29,11 +30,15 @@ dependencies = [
 # Main Server
 run-mcp = "local_code_agent.server:main"
 
-# Scientific Pipeline Agents (Individual Direct Hooks)
+# Phase 1 : Fortran → Fortran GPU + Cython
+agent-gpu      = "local_code_agent.agent.cli:run_translate_gpu"
+
+# Phase 2 : Fortran → JAX (legacy)
 agent-translate = "local_code_agent.agent.cli:run_translate"
-agent-profile = "local_code_agent.agent.cli:run_profile"
-# To invoke the whole graph from a single command
-agent-pipeline = "local_code_agent.agent.cli:main"
+agent-profile   = "local_code_agent.agent.cli:run_profile"
+
+# Master dispatcher (toutes les actions)
+agent-pipeline  = "local_code_agent.agent.cli:main"
 
 [build-system]
 requires = ["hatchling"]
