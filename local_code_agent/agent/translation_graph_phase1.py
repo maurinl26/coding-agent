@@ -540,28 +540,34 @@ def pure_elemental_agent(state: Phase1State) -> dict:
     }
 
 
-# ── Node 3 : OpenACC Insert ──────────────────────────────────────────────────
+# ── Node 4 : OpenACC Insert ──────────────────────────────────────────────────
 
 def openacc_insert_agent(state: Phase1State) -> dict:
-    """Loki-informed LLM : insère les pragmas OpenACC dans les kernels Fortran."""
+    """LLM : insère les pragmas OpenACC dans les kernels ET la région data du driver.
+
+    Deux cibles :
+      1. Chaque subroutine kernel → !$acc parallel loop collapse(2) sur les boucles 2D
+      2. Le driver PROGRAM → !$acc data ... région autour du time loop +
+         !$acc update host(...) avant chaque bloc I/O périodique
+    """
     print(f"\n{SEP}")
-    print("  [OpenACC] Inserting OpenACC pragmas")
+    print("  [OpenACC] Inserting OpenACC pragmas (kernels + driver data region)")
     print(SEP)
 
     llm = get_llm()
-    system = SystemMessage(content=(
-        "You are an OpenACC GPU expert for scientific Fortran. "
-        "Insert OpenACC pragmas to parallelize the given subroutine on NVIDIA A100 GPUs.\n"
+
+    # ── 4a : Kernel subroutines ───────────────────────────────────────────────
+    kernel_system = SystemMessage(content=(
+        "You are an OpenACC GPU expert for scientific Fortran.\n"
+        "Add OpenACC directives to parallelize this subroutine on NVIDIA A100 GPUs.\n"
         "Compiler: nvfortran -acc -gpu=cc80 (Ampere)\n"
-        "Guidelines:\n"
-        "  - !$acc routine seq  for subroutines called from within a GPU parallel region\n"
-        "  - !$acc parallel loop  for the outermost parallelizable loop\n"
-        "  - !$acc loop vector  for inner SIMD-eligible loops\n"
-        "  - !$acc data copyin(...) copyout(...)  for arrays entering/leaving GPU\n"
-        "  - Use copy(...) for INTENT(INOUT) arrays\n"
-        "  - !$acc end parallel  and  !$acc end data  to close regions\n"
-        "  - Do NOT add OpenACC to routines that contain PRINT/WRITE/READ\n"
-        "Return ONLY the annotated Fortran code."
+        "Guidelines for finite-difference stencil subroutines:\n"
+        "  - Add !$acc parallel loop collapse(2) before the outermost 2D loop nest\n"
+        "  - Add private(...) clause for scalar temporaries computed inside the loop\n"
+        "  - Do NOT add data movement clauses here — handled by the driver !$acc data region\n"
+        "  - !$acc end parallel after end of loop nest\n"
+        "  - The subroutine does NOT need !$acc routine — it's called from host, not device\n"
+        "Return ONLY the annotated Fortran subroutine."
     ))
 
     updated: List[KernelInfo] = []
@@ -573,35 +579,71 @@ def openacc_insert_agent(state: Phase1State) -> dict:
             updated.append({**kernel, "openacc_code": src})
             continue
 
-        in_args    = [n for n, i in kernel["intent_map"].items() if i == "IN"]
-        out_args   = [n for n, i in kernel["intent_map"].items() if i == "OUT"]
-        inout_args = [n for n, i in kernel["intent_map"].items() if i == "INOUT"]
-
+        # Identify scalar temporaries (not in intent_map → local variables in stencil)
+        # These need private() clause
         prompt = HumanMessage(content=(
-            f"Add OpenACC pragmas to this Fortran subroutine.\n"
-            f"Loki analysis:\n"
-            f"  loops:         {kernel['loops']}\n"
-            f"  INTENT(IN):    {in_args}\n"
-            f"  INTENT(OUT):   {out_args}\n"
-            f"  INTENT(INOUT): {inout_args}\n"
-            f"  array dims:    {kernel['dimensions']}\n\n"
+            f"Add !$acc parallel loop collapse(2) to the 2D loop nest in this subroutine.\n"
+            f"INTENT(IN):    {[n for n,i in kernel['intent_map'].items() if i=='IN']}\n"
+            f"INTENT(INOUT): {[n for n,i in kernel['intent_map'].items() if i=='INOUT']}\n\n"
             f"```fortran\n{src}\n```"
         ))
         try:
-            resp = llm.invoke([system, prompt])
+            resp = llm.invoke([kernel_system, prompt])
             annotated = _strip_markdown(resp.content)
-            print(f"  {kernel['routine_name']} → OpenACC pragmas inserted")
+            print(f"  {kernel['routine_name']} → !$acc parallel loop inserted")
             updated.append({**kernel, "openacc_code": annotated})
         except Exception as e:
             print(f"  LLM failed for {kernel['routine_name']}: {e}")
             updated.append({**kernel, "openacc_code": src, "error_log": str(e)})
 
-    combined = "\n\n".join(k["openacc_code"] for k in updated)
-    _save(_out("fortran_gpu") / "kernel_gpu.f90", combined)
+    # ── 4b : Driver data region ───────────────────────────────────────────────
+    driver_src = state.get("driver_fortran", "")
+    driver_with_acc = ""
+
+    if driver_src:
+        driver_system = SystemMessage(content=(
+            "You are an OpenACC GPU expert.\n"
+            "Add an !$acc data region around the time loop in this Fortran PROGRAM driver.\n"
+            "The subroutines inside the loop are already annotated with !$acc parallel loop.\n\n"
+            "Guidelines:\n"
+            "  - !$acc data copyin(lambda,mu,rho,b_x,b_x_half,b_y,b_y_half,a_x,...) "
+            "copy(vx,vy,sigma_xx,sigma_yy,sigma_xy,memory_dvx_dx,...) before the time loop\n"
+            "  - INTENT(IN) arrays  → copyin(...)\n"
+            "  - INTENT(INOUT) arrays (field + memory arrays) → copy(...)\n"
+            "  - Just before each periodic I/O block (if mod(it,IT_DISPLAY)==0): "
+            "add !$acc update host(vx,vy) to transfer velocity fields for PRINT/image output\n"
+            "  - !$acc end data after end of time loop\n"
+            "  - Keep ALL existing code and I/O intact — only add !$acc directives\n"
+            "Return ONLY the modified Fortran PROGRAM."
+        ))
+        driver_prompt = HumanMessage(content=(
+            f"Add !$acc data region around the time loop.\n"
+            f"Kernel subroutines called inside the loop: {state.get('kernel_names', [])}\n\n"
+            f"```fortran\n{driver_src}\n```"
+        ))
+        try:
+            resp = llm.invoke([driver_system, driver_prompt])
+            driver_with_acc = _strip_markdown(resp.content)
+            _save(_out("fortran_gpu") / "driver_gpu.f90", driver_with_acc)
+            print(f"  driver → !$acc data region inserted")
+        except Exception as e:
+            driver_with_acc = driver_src
+            print(f"  LLM failed for driver data region: {e}")
+    else:
+        print("  No driver.f90 found — skipping driver data region")
+
+    # ── Save annotated MODULE ────────────────────────────────────────────────
+    module_combined = "\n\n".join(k["openacc_code"] for k in updated)
+    _save(_out("fortran_gpu") / "module_kernels_gpu.f90", module_combined)
+
+    # The "kernel_gpu.f90" target for validation is the full GPU source
+    full_gpu = module_combined + ("\n\n" + driver_with_acc if driver_with_acc else "")
+    _save(_out("fortran_gpu") / "kernel_gpu.f90", full_gpu)
 
     return {
         "kernel_results": updated,
-        "openacc_fortran": combined,
+        "openacc_fortran": full_gpu,
+        "driver_fortran":  driver_with_acc or driver_src,
         "executed_agents": list(state.get("executed_agents", [])) + ["openacc"],
     }
 
@@ -726,95 +768,248 @@ def cython_wrapper_agent(state: Phase1State) -> dict:
     }
 
 
-# ── Node 5 : Validation ──────────────────────────────────────────────────────
+# ── Node 6 : Validation / GPU Compilation ────────────────────────────────────
+
+def _make_makefile(out_dir: Path, module_file: str, driver_file: str,
+                   binary_name: str, pyx_name: str) -> str:
+    """Génère un Makefile pour la compilation GPU + Cython. Toujours produit."""
+    return f"""# GPU Fortran + Cython build — generated by agent-gpu
+# Usage : make          (compile Fortran GPU)
+#         make cython   (build Cython extension)
+#         make clean
+
+FC      = nvfortran
+FFLAGS  = -acc -gpu=cc80 -Minfo=accel -fast
+TARGET  = {binary_name}
+MODULE  = fortran_gpu/{module_file}
+DRIVER  = fortran_gpu/{driver_file}
+
+all: $(TARGET)
+
+# Compile MODULE first (produces .mod file), then link with DRIVER
+$(TARGET): $(MODULE) $(DRIVER)
+\t$(FC) $(FFLAGS) -c $(MODULE) -o module_kernels_gpu.o
+\t$(FC) $(FFLAGS) $(DRIVER) module_kernels_gpu.o -o $(TARGET)
+\t@echo "\\n=== Compiled OK: $(TARGET) ===\\n"
+\t@echo "Run with: ./$(TARGET)"
+
+# Cython wrapper (requires Cython + numpy installed)
+cython: cython/setup.py
+\tcd cython && python setup.py build_ext --inplace
+\t@echo "Cython extension built in cython/"
+
+clean:
+\trm -f $(TARGET) *.o *.mod
+
+.PHONY: all cython clean
+"""
+
+
+def _make_compile_script(out_dir: Path, module_file: str, driver_file: str,
+                          binary_name: str) -> str:
+    """Génère compile_gpu.sh — script autonome pour HPC/Pangea/Azure."""
+    return f"""#!/bin/bash
+# compile_gpu.sh — Compile Fortran GPU kernels with nvfortran (OpenACC)
+# Generated by agent-gpu. Run this on the GPU node (Azure A100 / Pangea).
+#
+# Usage : bash compile_gpu.sh
+#         ./compile_gpu.sh --check   (verify nvfortran + GPU before compiling)
+
+set -e
+
+TARGET="{binary_name}"
+MODULE="fortran_gpu/{module_file}"
+DRIVER="fortran_gpu/{driver_file}"
+FC="${{FC:-nvfortran}}"
+FFLAGS="-acc -gpu=cc80 -Minfo=accel -fast"
+
+# ── Sanity checks ────────────────────────────────────────────────────────
+if [ "$1" = "--check" ] || [ ! -f "$MODULE" ]; then
+    echo "=== Environment check ==="
+    which "$FC" && "$FC" --version | head -1 || echo "WARNING: $FC not found"
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null \
+        || echo "WARNING: nvidia-smi not available"
+    echo "Files:"
+    ls -lh fortran_gpu/*.f90 2>/dev/null || echo "  No .f90 files found"
+    [ "$1" = "--check" ] && exit 0
+fi
+
+# ── Compile ──────────────────────────────────────────────────────────────
+echo "=== Compiling GPU Fortran (OpenACC, A100 cc80) ==="
+echo "  Step 1: Compile MODULE → module_kernels_gpu.o"
+$FC $FFLAGS -c "$MODULE" -o module_kernels_gpu.o
+
+echo "  Step 2: Compile DRIVER + link → $TARGET"
+$FC $FFLAGS "$DRIVER" module_kernels_gpu.o -o "$TARGET"
+
+echo ""
+echo "=== SUCCESS: ./$TARGET ==="
+echo "Run the simulation with:"
+echo "  ./$TARGET"
+echo ""
+echo "GPU memory usage (at runtime):"
+echo "  nvidia-smi dmon -d 1"
+"""
+
 
 def validation_agent(state: Phase1State) -> dict:
-    """Compile le Fortran GPU avec nvfortran et construit l'extension Cython."""
+    """Génère Makefile + compile_gpu.sh, puis tente la compilation GPU.
+
+    Stratégie en 3 niveaux :
+      1. Compilation locale   — si nvfortran est dans le PATH
+      2. Compilation SSH      — si AZURE_GPU_HOST est défini dans l'env
+      3. Génération seulement — toujours : Makefile + compile_gpu.sh pour lancer manuellement
+    """
     print(f"\n{SEP}")
-    print("  [Validation] Compiling Fortran GPU + Cython")
+    print("  [Validation] GPU Compilation (local → SSH → manual fallback)")
     print(SEP)
 
-    log_lines: List[str] = []
-    passed = True
+    out_dir     = Path("output").resolve()
+    gpu_dir     = out_dir / "fortran_gpu"
+    log_lines:  List[str] = []
+    compiled    = False
 
-    gpu_fortran = Path("output/fortran_gpu/kernel_gpu.f90").resolve()
-    compiler    = _gpu_compiler()
+    # Determine filenames — prefer split module+driver, fallback to kernel_gpu.f90
+    module_file = "module_kernels_gpu.f90" if (gpu_dir / "module_kernels_gpu.f90").exists() else "kernel_gpu.f90"
+    driver_file = "driver_gpu.f90"         if (gpu_dir / "driver_gpu.f90").exists()         else ""
+    filepath    = state.get("fortran_filepath", "kernel")
+    binary_name = Path(filepath).stem.lower().replace("-", "_") + "_gpu"
 
-    # ── Step 1 : Compile Fortran GPU ────────────────────────────────
-    if not gpu_fortran.exists():
-        log_lines.append("SKIP (Fortran): output/fortran_gpu/kernel_gpu.f90 not found")
-        passed = False
-    elif not compiler:
-        log_lines.append("SKIP (Fortran): nvfortran/pgfortran not found — install NVIDIA HPC SDK")
-        passed = False
+    # ── Always generate build artifacts ──────────────────────────────
+    makefile_content = _make_makefile(out_dir, module_file, driver_file or module_file,
+                                      binary_name, "")
+    compile_sh       = _make_compile_script(out_dir, module_file, driver_file or module_file,
+                                            binary_name)
+    _save(out_dir / "Makefile",         makefile_content)
+    _save(out_dir / "compile_gpu.sh",   compile_sh)
+    os.chmod(out_dir / "compile_gpu.sh", 0o755)
+    log_lines.append("OK: Makefile and compile_gpu.sh generated in output/")
+    print("  Generated: output/Makefile  +  output/compile_gpu.sh")
+
+    # ── Build command list ────────────────────────────────────────────
+    def _compile_cmds(fc: str) -> List[List[str]]:
+        fflags = ["-acc", "-gpu=cc80", "-Minfo=accel", "-fast"]
+        mod_src = str(gpu_dir / module_file)
+        if driver_file and (gpu_dir / driver_file).exists():
+            drv_src = str(gpu_dir / driver_file)
+            return [
+                [fc] + fflags + ["-c", mod_src, "-o", str(out_dir / "module_kernels_gpu.o")],
+                [fc] + fflags + [drv_src, str(out_dir / "module_kernels_gpu.o"),
+                                 "-o", str(out_dir / binary_name)],
+            ]
+        else:
+            return [[fc] + fflags + [mod_src, "-o", str(out_dir / binary_name)]]
+
+    def _run_cmds(cmds: List[List[str]], label: str) -> bool:
+        for cmd in cmds:
+            print(f"  $ {' '.join(cmd)}")
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
+                                   cwd=str(out_dir))
+                if r.returncode != 0:
+                    log_lines.append(f"FAIL ({label}): {cmd[0]} rc={r.returncode}")
+                    log_lines.append(r.stderr[:600])
+                    print(f"  FAIL rc={r.returncode}: {r.stderr[:200]}")
+                    return False
+                if r.stdout:
+                    log_lines.append(r.stdout[:300])
+            except subprocess.TimeoutExpired:
+                log_lines.append(f"FAIL ({label}): timeout >180s")
+                return False
+            except Exception as e:
+                log_lines.append(f"FAIL ({label}): {e}")
+                return False
+        log_lines.append(f"OK ({label}): compiled → {binary_name}")
+        return True
+
+    # ── Level 1 : Local nvfortran ─────────────────────────────────────
+    local_fc = _gpu_compiler()
+    if local_fc and (gpu_dir / module_file).exists():
+        print(f"\n  Attempting local compilation with {local_fc} ...")
+        if _run_cmds(_compile_cmds(local_fc), "local"):
+            compiled = True
+            print(f"  LOCAL compilation OK → output/{binary_name}")
+        else:
+            print("  Local compilation failed — see validation.log")
     else:
-        so_path = gpu_fortran.parent / "kernel_gpu.so"
-        cmd = [compiler, "-acc", "-gpu=cc80", "-shared", "-fPIC",
-               "-o", str(so_path), str(gpu_fortran)]
-        print(f"  $ {' '.join(cmd)}")
+        reason = "nvfortran not found" if not local_fc else f"{module_file} not found"
+        log_lines.append(f"SKIP (local): {reason}")
+        print(f"  Local compile skipped: {reason}")
+
+    # ── Level 2 : SSH remote (Azure A100 / Pangea) ────────────────────
+    gpu_host = os.getenv("AZURE_GPU_HOST", "")
+    gpu_user = os.getenv("AZURE_GPU_USER", "azureuser")
+    gpu_key  = os.getenv("AZURE_GPU_KEY",  "")   # path to SSH private key
+
+    if not compiled and gpu_host:
+        print(f"\n  Attempting remote compilation on {gpu_user}@{gpu_host} ...")
+        ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=15"]
+        if gpu_key:
+            ssh_opts += ["-i", gpu_key]
+
+        remote_dir = f"~/gpu_agent_build/{binary_name}"
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            if result.returncode == 0:
-                log_lines.append(f"OK (Fortran): compiled → {so_path.name}")
-                print(f"  Fortran GPU compiled successfully.")
+            # Copy output/ to remote
+            scp_cmd = ["scp"] + ssh_opts + ["-r", str(out_dir),
+                       f"{gpu_user}@{gpu_host}:{remote_dir}"]
+            print(f"  scp output/ → {gpu_host}:{remote_dir}")
+            r = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                raise RuntimeError(f"scp failed: {r.stderr[:200]}")
+
+            # Run make on remote
+            make_cmd = ["ssh"] + ssh_opts + [f"{gpu_user}@{gpu_host}",
+                        f"cd {remote_dir}/output && bash compile_gpu.sh"]
+            print(f"  ssh → bash compile_gpu.sh")
+            r = subprocess.run(make_cmd, capture_output=True, text=True, timeout=180)
+            if r.returncode == 0:
+                compiled = True
+                log_lines.append(f"OK (SSH {gpu_host}): compiled → {binary_name}")
+                print(f"  REMOTE compilation OK on {gpu_host}")
+                print(f"  Binary: {remote_dir}/output/{binary_name}")
             else:
-                log_lines.append(f"FAIL (Fortran): rc={result.returncode}")
-                log_lines.append(result.stderr[:800])
-                passed = False
-                print(f"  Fortran compilation failed (rc={result.returncode}).")
-                if result.stderr:
-                    print(f"  {result.stderr[:300]}")
-        except subprocess.TimeoutExpired:
-            log_lines.append("FAIL (Fortran): compilation timeout (>120s)")
-            passed = False
+                log_lines.append(f"FAIL (SSH): rc={r.returncode}\n{r.stderr[:400]}")
+                print(f"  Remote compilation failed: {r.stderr[:200]}")
         except Exception as e:
-            log_lines.append(f"FAIL (Fortran): {e}")
-            passed = False
+            log_lines.append(f"FAIL (SSH): {e}")
+            print(f"  SSH error: {e}")
+    elif not compiled and not gpu_host:
+        log_lines.append(
+            "SKIP (SSH): set AZURE_GPU_HOST=<ip> (+ AZURE_GPU_USER, AZURE_GPU_KEY) "
+            "to enable remote compilation"
+        )
+        print("  SSH skipped: AZURE_GPU_HOST not set")
 
-    # ── Step 2 : Build Cython extension ─────────────────────────────
-    setup_py = Path("output/setup.py").resolve()
-    pyx_files = list(Path("output/cython").glob("*.pyx"))
+    # ── Level 3 : Manual instructions ────────────────────────────────
+    if not compiled:
+        log_lines.append("")
+        log_lines.append("=== Manual compilation (copy output/ to GPU node) ===")
+        log_lines.append(f"  scp -r output/ azureuser@<GPU_IP>:~/seismic_gpu/")
+        log_lines.append(f"  ssh azureuser@<GPU_IP>")
+        log_lines.append(f"  cd seismic_gpu && bash compile_gpu.sh")
+        log_lines.append(f"  ./{binary_name}")
+        print("\n  Manual steps written to validation.log")
 
-    if not pyx_files:
-        log_lines.append("SKIP (Cython): no .pyx file generated")
-    elif not setup_py.exists():
-        log_lines.append("SKIP (Cython): output/setup.py not found")
-    elif not shutil.which("cython") and not shutil.which("cythonize"):
-        log_lines.append("SKIP (Cython): Cython not found in PATH")
-    else:
-        cmd = [sys.executable, str(setup_py), "build_ext", "--inplace"]
-        print(f"  $ {' '.join(cmd)}")
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True,
-                cwd=str(Path("output").resolve()), timeout=120
-            )
-            if result.returncode == 0:
-                log_lines.append("OK (Cython): extension built")
-                print("  Cython extension built successfully.")
-            else:
-                log_lines.append(f"FAIL (Cython): rc={result.returncode}")
-                log_lines.append(result.stderr[:500])
-                passed = False
-                print(f"  Cython build failed (rc={result.returncode}).")
-        except subprocess.TimeoutExpired:
-            log_lines.append("FAIL (Cython): build timeout (>120s)")
-            passed = False
-        except Exception as e:
-            log_lines.append(f"FAIL (Cython): {e}")
-            passed = False
-
-    # ── Report ───────────────────────────────────────────────────────
+    # ── Report ────────────────────────────────────────────────────────
     log = "\n".join(log_lines)
-    _save(_out("fortran_gpu") / "validation.log", log)
-    status_str = "PASSED" if passed else "FAILED (check validation.log)"
-    print(f"\n  Validation : {status_str}")
+    _save(gpu_dir / "validation.log", log)
+
+    print(f"\n  Files generated in output/:")
+    for f in sorted(out_dir.rglob("*")):
+        if f.is_file() and not f.name.endswith(".pyc"):
+            size = f.stat().st_size
+            rel  = f.relative_to(out_dir)
+            ok   = "OK" if size > 50 else "??"
+            print(f"    [{ok}] {str(rel):<45} {size:>7} bytes")
+
+    status = "COMPILED" if compiled else "ARTIFACTS_READY (run compile_gpu.sh on GPU node)"
+    print(f"\n  Status : {status}")
     print(SEP2 + "\n")
 
     return {
-        "validation_passed": passed,
-        "validation_log": log,
-        "executed_agents": list(state.get("executed_agents", [])) + ["validation"],
+        "validation_passed": compiled,
+        "validation_log":    log,
+        "executed_agents":   list(state.get("executed_agents", [])) + ["validation"],
     }
 
 
@@ -826,6 +1021,7 @@ workflow_phase1 = StateGraph(Phase1State)
 
 workflow_phase1.add_node("init",           init_phase1)
 workflow_phase1.add_node("parser",         parser_phase1)
+workflow_phase1.add_node("extractor",      extractor_agent)
 workflow_phase1.add_node("pure_elemental", pure_elemental_agent)
 workflow_phase1.add_node("openacc",        openacc_insert_agent)
 workflow_phase1.add_node("cython_wrapper", cython_wrapper_agent)
@@ -833,7 +1029,8 @@ workflow_phase1.add_node("validation",     validation_agent)
 
 workflow_phase1.set_entry_point("init")
 workflow_phase1.add_edge("init",           "parser")
-workflow_phase1.add_edge("parser",         "pure_elemental")
+workflow_phase1.add_edge("parser",         "extractor")
+workflow_phase1.add_edge("extractor",      "pure_elemental")
 workflow_phase1.add_edge("pure_elemental", "openacc")
 workflow_phase1.add_edge("openacc",        "cython_wrapper")
 workflow_phase1.add_edge("cython_wrapper", "validation")

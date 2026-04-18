@@ -173,6 +173,45 @@ cd infrastructure && ./deploy.sh
 
 ---
 
+## Philosophie de transformation
+
+Le pipeline suit une séquence où chaque étape **active** la suivante :
+
+```
+Fortran monolithique → Fortran modulaire (PURE + INTENT) → GPU (OpenACC) → Python (Cython) → JAX
+```
+
+- **PURE/ELEMENTAL** n'est pas seulement une optimisation Fortran — c'est la forme que JAX attend.
+  Une subroutine PURE avec INTENT explicites est une **fonction mathématique pure** : pas d'état caché,
+  déterministe, directement compilable par XLA.
+- **OpenACC** exploite cette pureté : les boucles `!$acc parallel loop` sont correctes
+  uniquement si chaque itération (i,j) est indépendante — ce que garantit PURE.
+- **Cython** expose les subroutines GPU à Python sans copie mémoire (typed memoryviews).
+
+Voir [TRANSFORMATION.md](TRANSFORMATION.md) pour la documentation complète.
+
+## Tester sur le GPU Azure A100
+
+```bash
+# 1. Lancer le pipeline
+uv run agent-gpu translate /path/to/kernel.f90
+
+# 2. Déployer sur la VM A100
+AZURE_GPU_HOST=<ip> bash scripts/test_gpu.sh
+
+# 3. Vérifier l'environnement GPU distant
+AZURE_GPU_HOST=<ip> bash scripts/test_gpu.sh --check
+
+# 4. Compiler ET lancer la simulation
+AZURE_GPU_HOST=<ip> bash scripts/test_gpu.sh --run
+```
+
+Obtenir l'IP du GPU : `az vm list-ip-addresses -g rg-total-seismic-agent -o table`
+
+Si `AZURE_GPU_HOST` est dans `.env`, la compilation SSH est automatique à la fin du pipeline.
+Le script `output/compile_gpu.sh` est toujours généré — copiez `output/` sur n'importe quel
+nœud GPU (Pangea, Azure, GENCI) et lancez `bash compile_gpu.sh`.
+
 ## Dépendances clés
 
 | Paquet | Rôle |
