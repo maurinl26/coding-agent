@@ -13,25 +13,76 @@ Propulsé par Azure Mistral-Large · LangGraph · Loki (ECMWF)
 
 ---
 
-## 0. Intro - Le besoin des R&D Scientifique 
+## 0. Le besoin R&D scientifique
 
-Flexibiliser leur code scientifique, réduire les coûts de simulations (humains et en infrastructure).
+### Le contexte
 
-**La chaîne de valeur**
+Les équipes R&D de TotalEnergies font tourner des **simulations physiques lourdes** (sismique,
+géomécanique, réservoir, CFD) pour trois usages : exploration, optimisation de production,
+validation des modèles IA. Ces simulations reposent sur des codes Fortran écrits dans les années
+90–2000 qui tournent sur des **clusters CPU HPC** (Pangea) en mode batch — parfois plusieurs
+jours par run.
 
-Code Fortran Legacy (HPC multi-cpu) -> Code GPU (à la demande dans le Cloud) -> Surrogate IA -> Modèle de décisions.
+> **Expertise transférable — Météo France**  
+> Ce problème n'est pas propre à l'E&P. Les codes de prévision numérique du temps (NWP) — ARPEGE,
+> AROME, IFS (ECMWF) — partagent exactement le même patrimoine : Fortran 90 monolithique, COMMON
+> blocks, clusters CPU massivement parallèles (MPI), et une dette technique qui freine
+> l'intégration GPU et l'IA. La même chaîne de valeur s'applique : portage GPU → génération de
+> données → surrogate IA → prévision hybride physique/ML. Les patterns de transformation
+> documentés ici (INTENT, SAVE, COMMON, OpenACC) sont directement applicables aux codes
+> météorologiques.  
+> — **Loïc Maurin** · [LinkedIn](https://www.linkedin.com/in/lo%C3%AFc-maurin/) · maurin.loic.ac@gmail.com
 
-- Le code GPU à la demande permet de (x10/x100 speed up) :
-  - générer des données d'entraînement pour le modèle d'IA,
-  - vérifier les outputs critiques des modèles d'IA (loss physique).
+### Les pain points
 
-- Le surrogate IA (speedup 10^4 / 10^5) offre :
-  - un proxy décisionnel rapide / instantané,
-  - un modèle de ciblage pour le modèle numérique.
+**1 — Coût humain du portage GPU**  
+Le patrimoine logiciel R&D compte des centaines de codes Fortran legacy. Les porter manuellement
+sur GPU demande 2 à 6 semaines par code et un profil rare (HPC senior + OpenACC + Cython).
+Résultat : les GPU restent sous-utilisés, les équipes gardent des workflows CPU lents.
 
-Les agents proposés couvrent la chaîne de valeur. Ils génèrent :
-- le Code GPU à la demande,
-- le surrogate IA à entraîner.
+**2 — Goulot d'étranglement sur la génération de données IA**  
+Entraîner un surrogate IA (FNO, PINN) nécessite des dizaines de milliers de runs de simulation.
+Sur CPU Pangea, un jeu d'entraînement prend des semaines. Sur GPU, quelques heures.
+Le portage GPU est le **bloquant principal** de la boucle Simulation → IA.
+
+**3 — Validation physique des modèles IA coûteuse**  
+Les modèles IA (proxy de décision) doivent être vérifiés par le code physique de référence à
+chaque itération d'entraînement (loss physique, métriques de conservation). Si ce code est lent,
+le cycle de validation bride la cadence d'entraînement.
+
+**4 — Rigidité des codes legacy**  
+Les codes Fortran monolithiques ne s'interfacent pas avec Python, JAX, ou les pipelines MLOps
+modernes. Pas d'API, pas de bindings — les scientifiques ne peuvent pas les appeler depuis un
+notebook ou un pipeline Airflow.
+
+### La chaîne de valeur
+
+```
+Code Fortran Legacy (HPC Pangea, CPU multi-cœur, jours/run)
+    │
+    ▼  [Phase 1 — cet agent, ~2 min]
+Code GPU cloud (A100/T4, ×10–×100 speedup, heures/run)
+    │  ├─ Génère les données d'entraînement du surrogate IA
+    │  └─ Valide les outputs critiques des modèles IA (loss physique)
+    │
+    ▼  [Phase 2 — différentiation automatique JAX]
+Surrogate IA (FNO, PINN — speedup ×10⁴–×10⁵ vs simulation FD)
+    │  ├─ Proxy décisionnel instantané (exploration, optimisation)
+    │  └─ Modèle de ciblage pour orienter le simulateur numérique
+    │
+    ▼  [Pipeline MLOps]
+Modèle de décision (inversion sismique, optimisation réservoir, ciblage forage)
+```
+
+### Ce que les agents couvrent
+
+| Agent | Entrée | Sortie | Déblocage |
+|-------|--------|--------|-----------|
+| **`agent-gpu`** (Phase 1) | Fortran legacy | Fortran GPU + wrapper Python | Génération données IA, validation physique |
+| **`agent-pipeline`** (Phase 2) | Fortran GPU | JAX différentiable | Entraînement surrogate, gradient-based inversion |
+
+Les deux agents s'intègrent dans l'IDE (MCP) ou en CI/CD (CLI) — **l'ingénieur R&D garde la main**
+sur le code généré via le mode Human-in-the-Loop avant compilation GPU.
 
 
 
