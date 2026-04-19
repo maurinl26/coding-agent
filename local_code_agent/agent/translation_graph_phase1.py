@@ -4,12 +4,13 @@ Graph d'agents LangGraph — Phase 1 : Fortran → Fortran GPU + Cython.
 Pipeline :
   init → parser → extractor → pure_elemental → openacc → cython_wrapper → validation → END
 
-Étape clé — extractor :
-  Les codes scientifiques comme seismic_CPML sont des PROGRAM monolithiques avec des
-  boucles compute inlines. L'extractor identifie ces boucles 2D et les extrait en
-  subroutines dans un MODULE Fortran avec des INTENT explicites. Le PROGRAM devient
-  un driver qui appelle le MODULE. Cela permet ensuite d'annoter chaque kernel
-  séparément avec PURE/ELEMENTAL et OpenACC.
+Appels LLM (4 maximum, ~$0.06/pipeline) :
+  parser         → Loki AST pur, zéro LLM
+  extractor      → 1 appel LLM (extraction sémantique monolithique → subroutines)
+  pure_elemental → Loki/règles AST, zéro LLM (décision déterministe)
+  openacc        → 1 appel LLM (driver !$acc data region) + regex pour kernels
+  cython_wrapper → 2 appels LLM (.pyx + header C iso_c_binding)
+  validation     → gfortran/nvfortran pur, zéro LLM
 
 Compilateur cible : nvfortran (NVIDIA HPC SDK) — flags : -acc -gpu=cc80 (A100 Ampere)
 Interface Python  : Cython + NumPy typed memoryviews (np.float64_t[:,:])
@@ -134,50 +135,70 @@ def _gfortran_local_check(sources: List[Path]) -> tuple[bool, bool, str]:
     ok_no_acc   = False
     ok_with_acc = False
 
+    def _strip_acc(code: str) -> str:
+        return "\n".join(
+            line for line in code.splitlines()
+            if not re.match(r"^\s*!\$acc", line, re.IGNORECASE)
+        )
+
+    def _compile_sequential(srcs: List[Path], flags: List[str], mod_dir: Path,
+                             label: str) -> tuple[bool, str]:
+        """Compile sources in order: module with -c (produces .mod), then driver with -fsyntax-only."""
+        msgs: List[str] = []
+        for i, src in enumerate(srcs):
+            is_last = (i == len(srcs) - 1)
+            # Last source = driver (or single file) → syntax-only; others → compile to get .mod
+            if is_last:
+                cmd = [gfc] + flags + ["-fsyntax-only", f"-I{mod_dir}", str(src)]
+            else:
+                cmd = [gfc] + flags + ["-c", f"-J{mod_dir}", f"-I{mod_dir}",
+                                       str(src), "-o", str(mod_dir / (src.stem + ".o"))]
+            msgs.append(f"  $ {' '.join(cmd)}")
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
+                                   cwd=str(mod_dir))
+                if r.returncode != 0:
+                    msgs.append(f"  FAIL rc={r.returncode}")
+                    msgs.append("  " + (r.stderr or r.stdout)[:600])
+                    return False, "\n".join(msgs)
+            except Exception as e:
+                msgs.append(f"  ERROR: {e}")
+                return False, "\n".join(msgs)
+        msgs.append(f"  OK — {label}")
+        return True, "\n".join(msgs)
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
+        mod1 = tmp / "mod1"   # .mod files for Flavor 1 (stripped)
+        mod2 = tmp / "mod2"   # .mod files for Flavor 2 (with acc)
+        mod1.mkdir(); mod2.mkdir()
 
-        # ── Flavor 1 : strip !$acc directives ────────────────────────────
-        stripped_srcs: List[str] = []
+        # ── Flavor 1 : strip !$acc directives, compile sequentially ──────
+        stripped: List[Path] = []
         for src in sources:
             if not src.exists():
                 continue
-            code = src.read_text(encoding="utf-8")
-            stripped = "\n".join(
-                line for line in code.splitlines()
-                if not re.match(r"^\s*!\$acc", line, re.IGNORECASE)
-            )
-            dst = tmp / ("stripped_" + src.name)
-            dst.write_text(stripped, encoding="utf-8")
-            stripped_srcs.append(str(dst))
+            dst = tmp / ("s_" + src.name)
+            dst.write_text(_strip_acc(src.read_text(encoding="utf-8")), encoding="utf-8")
+            stripped.append(dst)
 
-        cmd1 = [gfc, "-O2", "-fsyntax-only"] + stripped_srcs
-        logs.append(f"\nFlavor 1 (CPU, no !$acc): {' '.join(cmd1)}")
-        try:
-            r = subprocess.run(cmd1, capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
-                ok_no_acc = True
-                logs.append("  OK — Fortran logic is syntactically valid.")
-            else:
-                logs.append(f"  FAIL rc={r.returncode}")
-                logs.append("  " + (r.stderr or r.stdout)[:600])
-        except Exception as e:
-            logs.append(f"  ERROR: {e}")
+        logs.append(f"\nFlavor 1 (CPU, no !$acc):")
+        if stripped:
+            ok_no_acc, msg = _compile_sequential(stripped, ["-O2"], mod1,
+                                                  "Fortran logic is syntactically valid.")
+            logs.append(msg)
+        else:
+            logs.append("  SKIP: no sources")
 
-        # ── Flavor 2 : keep !$acc, use -fopenacc ─────────────────────────
-        all_srcs = [str(s) for s in sources if s.exists()]
-        cmd2 = [gfc, "-fopenacc", "-fsyntax-only"] + all_srcs
-        logs.append(f"\nFlavor 2 (with OpenACC): {' '.join(cmd2)}")
-        try:
-            r = subprocess.run(cmd2, capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
-                ok_with_acc = True
-                logs.append("  OK — OpenACC directives are syntactically valid.")
-            else:
-                logs.append(f"  FAIL rc={r.returncode}")
-                logs.append("  " + (r.stderr or r.stdout)[:600])
-        except Exception as e:
-            logs.append(f"  ERROR: {e}")
+        # ── Flavor 2 : keep !$acc, use -fopenacc, compile sequentially ───
+        orig = [s for s in sources if s.exists()]
+        logs.append(f"\nFlavor 2 (with OpenACC, gfortran -fopenacc):")
+        if orig:
+            ok_with_acc, msg = _compile_sequential(orig, ["-fopenacc"], mod2,
+                                                    "OpenACC directives are syntactically valid.")
+            logs.append(msg)
+        else:
+            logs.append("  SKIP: no sources")
 
     return ok_no_acc, ok_with_acc, "\n".join(logs)
 
@@ -350,13 +371,72 @@ def parser_phase1(state: Phase1State) -> dict:
             print(f"  Routine: {routine.name} | loops={len(loops)} | "
                   f"io={has_io} | save={has_save} | args={len(intent_map)}")
 
+        # ── Source-level static analysis (regex on raw source) ───────────
+        raw_src = Path(filepath).read_text(encoding="utf-8")
+
+        # G3 — Implicit types / missing KIND
+        has_implicit_none  = bool(re.search(r"^\s*IMPLICIT\s+NONE", raw_src, re.IGNORECASE | re.MULTILINE))
+        has_implicit_types = bool(re.search(
+            r"^\s*(REAL|INTEGER|COMPLEX|DOUBLE\s+PRECISION)\s+\w",
+            raw_src, re.IGNORECASE | re.MULTILINE,
+        ))
+
+        # G4 — COMMON blocks
+        common_blocks = [
+            {"name": n, "vars": [v.strip() for v in vs.split(",") if v.strip()]}
+            for n, vs in re.findall(r"COMMON\s*/(\w+)/\s*([^\n!]+)", raw_src, re.IGNORECASE)
+        ]
+
+        # G6 — Feature flags USE_xx / APPLY_xx (LOGICAL PARAMETER)
+        feature_flags = {
+            name: val.upper()
+            for name, val in re.findall(
+                r"LOGICAL\s*,\s*PARAMETER\s*::\s*(\w+)\s*=\s*(\.TRUE\.|\.FALSE\.)",
+                raw_src, re.IGNORECASE,
+            )
+        }
+
+        # G7 — POINTER attributes
+        has_pointers = bool(re.search(r",\s*POINTER\s*::", raw_src, re.IGNORECASE))
+
+        # G8 — Derived types (AoS candidate)
+        has_derived_types = bool(re.search(r"^\s*TYPE\s*::", raw_src, re.IGNORECASE | re.MULTILINE))
+
+        # G2 — Loop-carried dependency per kernel (same array read & written)
+        for ki in kernel_results:
+            src = ki["fortran_code"]
+            lhs_names = set(re.findall(r"^\s*(\w+)\s*\(", src, re.MULTILINE))
+            dep = any(
+                bool(re.search(rf"\b{n}\s*\([^)]*[ij]\s*[-+]\s*1", src, re.IGNORECASE))
+                and bool(re.search(rf"^\s*{n}\s*\(", src, re.IGNORECASE | re.MULTILINE))
+                for n in lhs_names
+            )
+            ki["has_loop_carried_dep"] = dep
+
+        if common_blocks:
+            print(f"  ⚠️  COMMON blocks detected: {[b['name'] for b in common_blocks]}")
+        if has_implicit_types:
+            print(f"  ⚠️  Implicit type declarations detected (no KIND) — will normalize")
+        if has_pointers:
+            print(f"  ⚠️  POINTER attributes detected — will convert to allocatable/args")
+        if has_derived_types:
+            print(f"  ⚠️  Derived TYPE detected (AoS candidate) — flagged for review")
+        if feature_flags:
+            print(f"  🔧 Feature flags: {list(feature_flags.keys())}")
+
         return {
             "kernel_results": kernel_results,
             "schema": schema,
             "is_program": is_program,
             "ast_info": {
-                "status": "parsed",
-                "routines": [k["routine_name"] for k in kernel_results],
+                "status":            "parsed",
+                "routines":          [k["routine_name"] for k in kernel_results],
+                "has_implicit_none": has_implicit_none,
+                "has_implicit_types": has_implicit_types,
+                "common_blocks":     common_blocks,
+                "feature_flags":     feature_flags,
+                "has_pointers":      has_pointers,
+                "has_derived_types": has_derived_types,
             },
             "executed_agents": list(state.get("executed_agents", [])) + ["parser"],
         }
@@ -417,35 +497,106 @@ def extractor_agent(state: Phase1State) -> dict:
     except Exception:
         full_source = state.get("fortran_code", "")
 
-    # Truncate if very large (keep first 600 lines for context — enough for seismic_CPML)
+    # Keep up to 2000 lines (covers most seismic CPML files fully)
     lines = full_source.split("\n")
-    source_preview = "\n".join(lines[:700]) if len(lines) > 700 else full_source
+    source_preview = "\n".join(lines[:2000]) if len(lines) > 2000 else full_source
 
     module_name = Path(filepath).stem.lower().replace("-", "_").replace(".", "_")
 
+    ast_info      = state.get("ast_info", {})
+    common_blocks = ast_info.get("common_blocks", [])
+    feature_flags = ast_info.get("feature_flags", {})
+    has_pointers  = ast_info.get("has_pointers", False)
+
+    # Build context-dependent rule sections
+    common_rules = ""
+    if common_blocks:
+        names = ", ".join(f"/{b['name']}/" for b in common_blocks)
+        common_rules = (
+            f"\nCOMMON BLOCKS ({names}) — mandatory:\n"
+            "  - Do NOT reproduce COMMON blocks in the MODULE.\n"
+            "  - Variables only read by a kernel → INTENT(IN) argument.\n"
+            "  - Variables modified by a kernel → INTENT(INOUT) argument.\n"
+            "  - Global constants (PARAMETER) may stay as MODULE-level PARAMETER.\n"
+        )
+
+    save_rules = (
+        "\nSAVE VARIABLES — mandatory:\n"
+        "  - Variables with SAVE attribute (persistent state between calls) become\n"
+        "    INTENT(INOUT) arguments of the subroutine. The driver declares them and\n"
+        "    passes them at each call. Remove the SAVE attribute from the declaration.\n"
+        "  Example: 'real, save :: psi_vx = 0.0' → 'real(dp), intent(inout) :: psi_vx'\n"
+    )
+
+    type_rules = (
+        "\nTYPING — mandatory (explicit KIND, no compiler inference):\n"
+        "  - Add at MODULE top: 'integer, parameter :: dp = selected_real_kind(15, 307)'\n"
+        "  - Replace REAL / DOUBLE PRECISION / REAL*8 / REAL(8) → real(dp)\n"
+        "  - Replace REAL*4 / REAL(4) → real(sp) with 'integer, parameter :: sp = selected_real_kind(6, 37)'\n"
+        "  - All real literals: 1.0 → 1.0_dp, 0.0d0 → 0.0_dp\n"
+        "  - Explicit casts: real(x, dp) — never leave implicit promotion.\n"
+        "  - IMPLICIT NONE mandatory in MODULE and in every SUBROUTINE.\n"
+    )
+
+    flag_rules = ""
+    if feature_flags:
+        active = [k for k, v in feature_flags.items() if ".TRUE." in v]
+        inactive = [k for k, v in feature_flags.items() if ".FALSE." in v]
+        flag_rules = (
+            f"\nFEATURE FLAGS ({', '.join(feature_flags)}) — CPP preprocessing:\n"
+            "  - Convert 'if (USE_xxx) then ... end if' → '#ifdef USE_xxx\\n...\\n#endif'\n"
+            "  - Output file must use .F90 extension (triggers CPP automatically).\n"
+            "  - Add a comment header listing active flags at top of MODULE.\n"
+            f"  - Active (.TRUE.): {active}   Inactive (.FALSE.): {inactive}\n"
+        )
+
+    pointer_rules = ""
+    if has_pointers:
+        pointer_rules = (
+            "\nPOINTERS — convert to safe alternatives:\n"
+            "  - 'real, pointer :: field(:,:)' → 'real(dp), allocatable :: field(:,:)'\n"
+            "    if the target is always one well-defined array.\n"
+            "  - Otherwise, pass the target directly as INTENT(IN/INOUT) argument.\n"
+            "  - Remove all 'field => target' association statements.\n"
+        )
+
     system = SystemMessage(content=(
         "You are a Fortran HPC expert specializing in GPU refactoring.\n"
-        "Your task: given a monolithic Fortran PROGRAM, extract the computational "
-        "kernels (2D finite-difference loops) into subroutines inside a Fortran MODULE.\n\n"
-        "Rules:\n"
-        "  1. Identify all 2D spatial loop nests (do j=... / do i=...) that update "
-        "     field arrays (velocities, stresses, memory variables) — these are the GPU kernels.\n"
-        "  2. Each loop nest becomes ONE subroutine. Name it descriptively "
-        "     (e.g. update_stress_xx_yy, update_velocity_x).\n"
-        "  3. All dummy arguments must have explicit INTENT(IN), INTENT(OUT), or INTENT(INOUT):\n"
-        "       - Arrays read AND written (in-place update): INTENT(INOUT)\n"
-        "       - Arrays only read: INTENT(IN)\n"
-        "       - Scalar parameters: INTENT(IN)\n"
-        "       - Grid sizes (NX, NY): INTENT(IN), INTEGER\n"
-        "  4. NO I/O (PRINT/WRITE/READ) inside the extracted subroutines.\n"
-        "  5. Keep loop bounds identical to the original code.\n"
-        "  6. The MODULE must use 'implicit none' and contain all subroutines.\n"
-        "  7. The PROGRAM driver must:\n"
-        "       - USE the module\n"
-        "       - Keep all parameter declarations, PML init, material init\n"
-        "       - Replace inline loop nests with calls to the MODULE subroutines\n"
-        "       - Keep I/O, seismogram recording, energy computation as-is (CPU)\n\n"
-        "Return TWO clearly separated code blocks:\n"
+        "Your task: given a monolithic Fortran PROGRAM, extract ONLY the inner 2D spatial\n"
+        "finite-difference loop nests into individual subroutines inside a Fortran MODULE.\n\n"
+        "=== WHAT TO EXTRACT (GPU kernels) ===\n"
+        "  - ONLY the inner 2D loop nests: 'do j=... / do i=...' blocks that update\n"
+        "    field arrays (velocities, stresses, memory PML variables).\n"
+        "  - Each distinct 2D loop nest → ONE subroutine (e.g. update_stress_xx_yy,\n"
+        "    update_stress_xy, update_velocity_x, update_velocity_y).\n"
+        "  - Expect 3–6 kernel subroutines for typical seismic CPML codes.\n\n"
+        "=== WHAT NOT TO EXTRACT (stays in PROGRAM driver) ===\n"
+        "  - Utility/I/O subroutines already defined in CONTAINS (write_seismograms,\n"
+        "    create_color_image, etc.) — leave them in the driver unchanged.\n"
+        "  - The time loop itself (do it = 1, NSTEP) — stays in the driver.\n"
+        "  - Initialization loops (material properties, PML coefficients) — stays in driver.\n"
+        "  - NEVER wrap the entire PROGRAM or time loop into a single subroutine.\n\n"
+        "=== ARGUMENT RULES (mandatory) ===\n"
+        "  - EVERY subroutine MUST have an explicit, non-empty argument list.\n"
+        "  - NEVER produce 'subroutine foo()' with an empty list — all variables used\n"
+        "    inside the subroutine must appear as INTENT-qualified dummy arguments.\n"
+        "  - Arrays read AND written in-place: INTENT(INOUT)\n"
+        "  - Arrays only read: INTENT(IN)\n"
+        "  - Scalar parameters (DELTAX, DELTAY, DELTAT): INTENT(IN)\n"
+        "  - Grid sizes (NX, NY): INTENT(IN), INTEGER\n"
+        "  - PML coefficient arrays (b_x, a_x, K_x, ...): INTENT(IN)\n\n"
+        "=== MODULE RULES ===\n"
+        "  - MODULE contains ONLY the extracted kernel subroutines, nothing else.\n"
+        "  - 'implicit none' at MODULE level and inside every subroutine.\n"
+        "  - Keep loop bounds identical to the original code.\n"
+        "  - No I/O (PRINT/WRITE/READ) inside the extracted subroutines.\n\n"
+        "=== DRIVER RULES ===\n"
+        "  - USE the module at the top of the PROGRAM.\n"
+        "  - Replace each inline 2D loop nest with a CALL to the corresponding subroutine.\n"
+        "  - Keep ALL initialization, I/O, energy computation, seismogram recording.\n"
+        "  - Keep the CONTAINS section with its utility subroutines unchanged.\n"
+        + type_rules + common_rules + save_rules + flag_rules + pointer_rules +
+        "\nReturn TWO clearly separated code blocks:\n"
         "  [MODULE] ... [/MODULE]\n"
         "  [DRIVER] ... [/DRIVER]"
     ))
@@ -479,15 +630,25 @@ def extractor_agent(state: Phase1State) -> dict:
                 driver_code = ""
                 print("  WARNING: could not parse separate MODULE/DRIVER blocks")
 
+        # G3 safety net — ensure IMPLICIT NONE appears before CONTAINS
+        if "implicit none" not in module_code.lower():
+            module_code = re.sub(
+                r"(\bcontains\b)", "  implicit none\n\\1",
+                module_code, count=1, flags=re.IGNORECASE,
+            )
+
+        # G6 safety net — rename to .F90 if CPP flags are present
+        out_ext = ".F90" if feature_flags else ".f90"
+
         # Extract kernel subroutine names from module code
         kernel_names = re.findall(r'^\s*subroutine\s+(\w+)\s*\(', module_code,
                                   re.IGNORECASE | re.MULTILINE)
         print(f"  Extracted {len(kernel_names)} kernel subroutine(s): {kernel_names}")
 
-        # Save outputs
-        _save(_out("fortran_gpu") / "module_kernels.f90", module_code)
+        # Save outputs (use .F90 extension when CPP flags are active)
+        _save(_out("fortran_gpu") / f"module_kernels{out_ext}", module_code)
         if driver_code:
-            _save(_out("fortran_gpu") / "driver.f90", driver_code)
+            _save(_out("fortran_gpu") / f"driver{out_ext}", driver_code)
 
         # Rebuild kernel_results from extracted subroutines
         # (the parser only saw the monolithic PROGRAM; now we have real subroutines)
@@ -553,52 +714,67 @@ def extractor_agent(state: Phase1State) -> dict:
 
 # ── Node 3 : PURE / ELEMENTAL ────────────────────────────────────────────────
 
-def pure_elemental_agent(state: Phase1State) -> dict:
-    """LLM : annote les kernels de calcul pur avec PURE ou ELEMENTAL."""
-    print(f"\n{SEP}")
-    print("  [PURE/ELEMENTAL] Annotating compute kernels")
-    print(SEP)
+def _annotate_purity(kernel: "KernelInfo") -> tuple[str, bool, bool]:
+    """Détermine et applique l'annotation PURE/ELEMENTAL par règles AST — sans LLM.
 
-    llm = get_llm()
-    system = SystemMessage(content=(
-        "You are a Fortran GPU expert. Annotate Fortran subroutines with PURE or ELEMENTAL "
-        "attributes where valid.\n"
-        "Rules:\n"
-        "  - PURE: no I/O, no SAVE, no COMMON, no hidden global state, all args must have INTENT\n"
-        "  - ELEMENTAL: same as PURE and operates element-wise on scalars/arrays\n"
-        "  - Only annotate pure compute kernels; skip routines with I/O, SAVE, or time loops\n"
-        "  - Add explicit INTENT attributes to all dummy arguments if missing\n"
-        "  - If a subroutine cannot be made PURE, return it unchanged\n"
-        "Return ONLY the annotated Fortran code, no prose."
-    ))
+    Loki a déjà détecté has_io, has_save, intent_map, loops.
+    Règles :
+      - has_io=True  → non éligible (WRITE/PRINT/READ incompatibles avec PURE)
+      - has_save=True → non éligible (état persistant incompatible avec PURE)
+      - Sinon : PURE si des boucles sont présentes (FD stencil)
+      - ELEMENTAL si aucune boucle interne (fonction scalaire point-à-point)
+    PURE est un hint sémantique intermédiaire — l'étape openacc le retirera
+    avant d'ajouter !$acc parallel loop (Fortran standard l'exige).
+    """
+    src = kernel["fortran_code"]
+    if kernel["has_io"] or kernel["has_save"]:
+        return src, False, False
+
+    has_loops    = bool(kernel.get("loops"))
+    is_elemental = not has_loops  # scalaire point-à-point sans boucle interne
+
+    if is_elemental:
+        annotated = re.sub(
+            r"^(\s*)(function\b)",
+            r"\1ELEMENTAL \2", src, count=1, flags=re.IGNORECASE | re.MULTILINE,
+        )
+        return annotated, False, True
+
+    # FD stencil avec boucles → PURE (hint intermédiaire, sera retiré par openacc)
+    annotated = re.sub(
+        r"^(\s*)(subroutine\b)",
+        r"\1PURE \2", src, count=1, flags=re.IGNORECASE | re.MULTILINE,
+    )
+    return annotated, True, False
+
+
+def pure_elemental_agent(state: Phase1State) -> dict:
+    """Annote les kernels PURE/ELEMENTAL par règles AST — zéro appel LLM.
+
+    Loki a déjà collecté has_io, has_save, loops, intent_map au stade parser.
+    La décision est donc déterministe et reproductible.
+    """
+    print(f"\n{SEP}")
+    print("  [PURE/ELEMENTAL] Annotating compute kernels (deterministic — no LLM)")
+    print(SEP)
 
     updated: List[KernelInfo] = []
     for kernel in state.get("kernel_results", []):
         if kernel["has_io"] or kernel["has_save"]:
-            print(f"  Skip {kernel['routine_name']} (io={kernel['has_io']}, save={kernel['has_save']})")
+            label = "I/O" if kernel["has_io"] else "SAVE"
+            print(f"  ⏭ Skip {kernel['routine_name']} ({label} — not eligible)")
             updated.append({**kernel, "pure_elemental_code": kernel["fortran_code"]})
             continue
 
-        prompt = HumanMessage(content=(
-            f"Annotate this Fortran subroutine with PURE or ELEMENTAL if valid.\n"
-            f"Loki analysis: loops={kernel['loops']}, intents={kernel['intent_map']}\n\n"
-            f"```fortran\n{kernel['fortran_code']}\n```"
-        ))
-        try:
-            resp = llm.invoke([system, prompt])
-            annotated = _strip_markdown(resp.content)
-            is_pure      = bool(re.search(r'\bPURE\b',      annotated, re.IGNORECASE))
-            is_elemental = bool(re.search(r'\bELEMENTAL\b', annotated, re.IGNORECASE))
-            print(f"  {kernel['routine_name']} → pure={is_pure}, elemental={is_elemental}")
-            updated.append({
-                **kernel,
-                "pure_elemental_code": annotated,
-                "is_pure": is_pure,
-                "is_elemental": is_elemental,
-            })
-        except Exception as e:
-            print(f"  LLM failed for {kernel['routine_name']}: {e}")
-            updated.append({**kernel, "pure_elemental_code": kernel["fortran_code"], "error_log": str(e)})
+        annotated, is_pure, is_elemental = _annotate_purity(kernel)
+        tag = "ELEMENTAL" if is_elemental else ("PURE" if is_pure else "plain")
+        print(f"  ✨ {kernel['routine_name']} → {tag}")
+        updated.append({
+            **kernel,
+            "pure_elemental_code": annotated,
+            "is_pure": is_pure,
+            "is_elemental": is_elemental,
+        })
 
     combined = "\n\n".join(k["pure_elemental_code"] for k in updated)
     _save(_out("fortran_gpu") / "kernel_pure.f90", combined)
@@ -630,29 +806,68 @@ def openacc_insert_agent(state: Phase1State) -> dict:
     kernel_system = SystemMessage(content=(
         "You are an OpenACC GPU expert for scientific Fortran.\n"
         "Add OpenACC directives to parallelize this subroutine on NVIDIA A100 GPUs.\n"
-        "Compiler: nvfortran -acc -gpu=cc80 (Ampere)\n"
+        "Compiler: nvfortran -acc -gpu=cc80 (Ampere)\n\n"
+        "CRITICAL — PURE/ELEMENTAL compatibility:\n"
+        "  The Fortran standard forbids OpenACC compute directives (!$acc parallel, !$acc kernels)\n"
+        "  inside PURE or ELEMENTAL procedures. If the subroutine has PURE or ELEMENTAL in its\n"
+        "  declaration, REMOVE that keyword. The functional purity is preserved as a semantic\n"
+        "  property (all INTENT are explicit, no I/O, no SAVE) — but the Fortran keyword must\n"
+        "  be absent when !$acc parallel loop is present.\n\n"
         "Guidelines for finite-difference stencil subroutines:\n"
+        "  - Remove PURE / ELEMENTAL from the subroutine statement\n"
         "  - Add !$acc parallel loop collapse(2) before the outermost 2D loop nest\n"
         "  - Add private(...) clause for scalar temporaries computed inside the loop\n"
         "  - Do NOT add data movement clauses here — handled by the driver !$acc data region\n"
         "  - !$acc end parallel after end of loop nest\n"
         "  - The subroutine does NOT need !$acc routine — it's called from host, not device\n"
-        "Return ONLY the annotated Fortran subroutine."
+        "Return ONLY the modified Fortran subroutine, no prose."
     ))
 
     updated: List[KernelInfo] = []
     for kernel in state.get("kernel_results", []):
         src = kernel.get("pure_elemental_code") or kernel["fortran_code"]
+        name = kernel["routine_name"]
 
         if kernel["has_io"]:
-            print(f"  Skip {kernel['routine_name']} (has I/O)")
+            print(f"  ⏭ Skip {name} (has I/O)")
             updated.append({**kernel, "openacc_code": src})
             continue
 
-        # Identify scalar temporaries (not in intent_map → local variables in stencil)
-        # These need private() clause
+        # G1 — ELEMENTAL → !$acc routine seq (no !$acc parallel inside ELEMENTAL)
+        if kernel.get("is_elemental"):
+            annotated = re.sub(
+                r"^(\s*)(PURE\s+|ELEMENTAL\s+)+(SUBROUTINE|FUNCTION)\b",
+                r"\1\3", src, flags=re.IGNORECASE | re.MULTILINE,
+            )
+            annotated = re.sub(
+                r"(^\s*(?:subroutine|function)\s+\w+[^\n]*\n)",
+                r"\1  !$acc routine seq\n",
+                annotated, count=1, flags=re.IGNORECASE | re.MULTILINE,
+            )
+            print(f"  ⚡ {name} (ELEMENTAL) → !$acc routine seq")
+            updated.append({**kernel, "openacc_code": annotated})
+            continue
+
+        # G2 — Loop-carried dependency → skip collapse, warn
+        if kernel.get("has_loop_carried_dep"):
+            annotated = re.sub(
+                r"^(\s*)(PURE\s+|ELEMENTAL\s+)+(SUBROUTINE\b)",
+                r"\1\3", src, flags=re.IGNORECASE | re.MULTILINE,
+            )
+            # Inject a warning comment before first do loop
+            annotated = re.sub(
+                r"(^\s*do\s+\w+\s*=)",
+                r"  ! ⚠ loop-carried dependency detected — cannot use !$acc parallel loop collapse\n\1",
+                annotated, count=1, flags=re.IGNORECASE | re.MULTILINE,
+            )
+            print(f"  ⚠ {name} — loop-carried dependency, skipping !$acc parallel")
+            updated.append({**kernel, "openacc_code": annotated})
+            continue
+
+        # FD stencil → !$acc parallel loop collapse(2) via LLM
         prompt = HumanMessage(content=(
-            f"Add !$acc parallel loop collapse(2) to the 2D loop nest in this subroutine.\n"
+            f"This is a 2D FD stencil subroutine (NOT ELEMENTAL — accesses neighbours).\n"
+            f"Add !$acc parallel loop collapse(2) inside the subroutine body.\n"
             f"INTENT(IN):    {[n for n,i in kernel['intent_map'].items() if i=='IN']}\n"
             f"INTENT(INOUT): {[n for n,i in kernel['intent_map'].items() if i=='INOUT']}\n\n"
             f"```fortran\n{src}\n```"
@@ -660,11 +875,20 @@ def openacc_insert_agent(state: Phase1State) -> dict:
         try:
             resp = llm.invoke([kernel_system, prompt])
             annotated = _strip_markdown(resp.content)
-            print(f"  {kernel['routine_name']} → !$acc parallel loop inserted")
+            # Safety net: strip any remaining PURE/ELEMENTAL the LLM left
+            annotated = re.sub(
+                r"^(\s*)(PURE\s+|ELEMENTAL\s+)+(SUBROUTINE\b)",
+                r"\1\3", annotated, flags=re.IGNORECASE | re.MULTILINE,
+            )
+            print(f"  🚀 {name} → !$acc parallel loop collapse(2)")
             updated.append({**kernel, "openacc_code": annotated})
         except Exception as e:
-            print(f"  LLM failed for {kernel['routine_name']}: {e}")
+            print(f"  ❌ LLM failed for {name}: {e}")
             updated.append({**kernel, "openacc_code": src, "error_log": str(e)})
+
+    # Extension: .F90 when CPP feature flags are active
+    feature_flags = state.get("ast_info", {}).get("feature_flags", {})
+    out_ext = ".F90" if feature_flags else ".f90"
 
     # ── 4b : Driver data region ───────────────────────────────────────────────
     driver_src = state.get("driver_fortran", "")
@@ -694,7 +918,7 @@ def openacc_insert_agent(state: Phase1State) -> dict:
         try:
             resp = llm.invoke([driver_system, driver_prompt])
             driver_with_acc = _strip_markdown(resp.content)
-            _save(_out("fortran_gpu") / "driver_gpu.f90", driver_with_acc)
+            _save(_out("fortran_gpu") / f"driver_gpu{out_ext}", driver_with_acc)
             print(f"  driver → !$acc data region inserted")
         except Exception as e:
             driver_with_acc = driver_src
@@ -704,11 +928,11 @@ def openacc_insert_agent(state: Phase1State) -> dict:
 
     # ── Save annotated MODULE ────────────────────────────────────────────────
     module_combined = "\n\n".join(k["openacc_code"] for k in updated)
-    _save(_out("fortran_gpu") / "module_kernels_gpu.f90", module_combined)
+    _save(_out("fortran_gpu") / f"module_kernels_gpu{out_ext}", module_combined)
 
-    # The "kernel_gpu.f90" target for validation is the full GPU source
+    # The fallback "kernel_gpu" target for validation is the full GPU source
     full_gpu = module_combined + ("\n\n" + driver_with_acc if driver_with_acc else "")
-    _save(_out("fortran_gpu") / "kernel_gpu.f90", full_gpu)
+    _save(_out("fortran_gpu") / f"kernel_gpu{out_ext}", full_gpu)
 
     return {
         "kernel_results": updated,
@@ -876,8 +1100,14 @@ clean:
 
 
 def _make_compile_script(out_dir: Path, module_file: str, driver_file: str,
-                          binary_name: str) -> str:
+                          binary_name: str,
+                          feature_flags: dict | None = None) -> str:
     """Génère compile_gpu.sh — script autonome pour HPC/Pangea/Azure (A100 ou T4)."""
+    cpp_flags = ""
+    if feature_flags:
+        active = [f"-D{k}" for k, v in feature_flags.items() if ".TRUE." in v.upper()]
+        if active:
+            cpp_flags = " ".join(["-cpp"] + active) + " "
     return f"""#!/bin/bash
 # compile_gpu.sh — Compile Fortran GPU kernels with nvfortran (OpenACC)
 # Generated by agent-gpu. Run this on the GPU node (Azure A100/T4, Pangea).
@@ -906,7 +1136,7 @@ detect_gpu_arch() {{
 }}
 
 GPU_ARCH=$(detect_gpu_arch)
-FFLAGS="-acc -gpu=${{GPU_ARCH}} -Minfo=accel -fast"
+FFLAGS="-acc -gpu=${{GPU_ARCH}} -Minfo=accel -fast {cpp_flags}"
 
 # ── Sanity checks ────────────────────────────────────────────────────────
 if [ "$1" = "--check" ]; then
@@ -959,9 +1189,18 @@ def validation_agent(state: Phase1State) -> dict:
     log_lines:  List[str] = []
     compiled    = False
 
-    # Determine filenames — prefer split module+driver, fallback to kernel_gpu.f90
-    module_file = "module_kernels_gpu.f90" if (gpu_dir / "module_kernels_gpu.f90").exists() else "kernel_gpu.f90"
-    driver_file = "driver_gpu.f90"         if (gpu_dir / "driver_gpu.f90").exists()         else ""
+    # Determine filenames — prefer split module+driver, check both .f90 and .F90 (CPP)
+    module_file = next(
+        (f for f in ["module_kernels_gpu.F90", "module_kernels_gpu.f90",
+                     "kernel_gpu.F90", "kernel_gpu.f90"]
+         if (gpu_dir / f).exists()),
+        "kernel_gpu.f90",
+    )
+    driver_file = next(
+        (f for f in ["driver_gpu.F90", "driver_gpu.f90"]
+         if (gpu_dir / f).exists()),
+        "",
+    )
     filepath    = state.get("fortran_filepath", "kernel")
     binary_name = Path(filepath).stem.lower().replace("-", "_") + "_gpu"
 
@@ -969,7 +1208,8 @@ def validation_agent(state: Phase1State) -> dict:
     makefile_content = _make_makefile(out_dir, module_file, driver_file or module_file,
                                       binary_name, "")
     compile_sh       = _make_compile_script(out_dir, module_file, driver_file or module_file,
-                                            binary_name)
+                                            binary_name,
+                                            state.get("ast_info", {}).get("feature_flags"))
     _save(out_dir / "Makefile",         makefile_content)
     _save(out_dir / "compile_gpu.sh",   compile_sh)
     os.chmod(out_dir / "compile_gpu.sh", 0o755)
