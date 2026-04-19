@@ -13,7 +13,7 @@ Propulsé par Azure Mistral-Large · LangGraph · Loki (ECMWF)
 
 ---
 
-## 0. Le besoin R&D scientifique
+## 0. 🎯 Le besoin R&D scientifique
 
 ### Le contexte
 
