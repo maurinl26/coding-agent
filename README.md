@@ -13,6 +13,28 @@ Propulsé par Azure Mistral-Large · LangGraph · Loki (ECMWF)
 
 ---
 
+## 0. Intro - Le besoin des R&D Scientifique 
+
+Flexibiliser leur code scientifique, réduire les coûts de simulations (humains et en infrastructure).
+
+**La chaîne de valeur**
+
+Code Fortran Legacy (HPC multi-cpu) -> Code GPU (à la demande dans le Cloud) -> Surrogate IA -> Modèle de décisions.
+
+- Le code GPU à la demande permet de (x10/x100 speed up) :
+  - générer des données d'entraînement pour le modèle d'IA,
+  - vérifier les outputs critiques des modèles d'IA (loss physique).
+
+- Le surrogate IA (speedup 10^4 / 10^5) offre :
+  - un proxy décisionnel rapide / instantané,
+  - un modèle de ciblage pour le modèle numérique.
+
+Les agents proposés couvrent la chaîne de valeur. Ils génèrent :
+- le Code GPU à la demande,
+- le surrogate IA à entraîner.
+
+
+
 ## 1. 🏭 Le problème opérationnel
 
 Les codes scientifiques HPC (sismique, météo, CFD) sont massivement écrits en Fortran des années 90 : **monolithiques, sans INTENT, avec COMMON blocks et état SAVE implicite.**
@@ -35,14 +57,14 @@ end program
 
 **Le portage GPU manuel** d'un tel code prend **2–6 semaines** d'expertise HPC senior : extraction des kernels, annotation OpenACC, gestion des clauses `copyin`/`copy`, Cython wrapper, tests numériques.
 
-**Cet agent automatise la transformation en moins de 2 minutes** :
+**Cet agent automatise la transformation en une session (1/2 journée avec revue manuelle, 1 nuit en automatique)** :
 
 | Étape | Entrée | Sortie | Gain |
 |-------|--------|--------|------|
 | **Phase 1** | Fortran CPU séquentiel | Fortran GPU (OpenACC) + wrapper Cython | ×10–100 sur GPU |
 | **Phase 2** | Fortran GPU | JAX / XLA | Différentiable, fusionnable ML |
 
-La démarche est **inductive** : partir du problème opérationnel concret (code sismique CPML),
+La démarche : partir du problème opérationnel concret (code sismique CPML),
 en extraire des règles de transformation précises (INTENT, COMMON, SAVE, POINTER, types...),
 puis généraliser à tout code Fortran HPC. Les [9 patterns documentés](#8--patterns-fortran--règles-de-transformation)
 couvrent 95% des codes scientifiques rencontrés chez Total.
@@ -79,8 +101,6 @@ couvrent 95% des codes scientifiques rencontrés chez Total.
 **Bilan LLM** : 4 appels maximum par pipeline (~2 min, ~$0.06 en tokens Mistral-Large-3).  
 Loki fait le travail d'analyse AST de façon déterministe — le LLM n'intervient que là où
 la compréhension sémantique est indispensable (extraction de kernels, génération d'interfaces).
-
-Voir [TRANSFORMATION.md](TRANSFORMATION.md) pour la philosophie détaillée de la chaîne.
 
 ---
 
