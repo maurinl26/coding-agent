@@ -92,10 +92,10 @@ resource "azurerm_network_interface" "nic_gpu" {
 }
 
 resource "azurerm_linux_virtual_machine" "vm_gpu" {
-  name                = "vm-gpu-a100"
+  name                = "vm-gpu-t4"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_NC24ads_A100_v4" # 1x Nvidia A100 80GB (Ampere)
+  size                = "Standard_NC4as_T4_v3" # 1x Nvidia A100 80GB (Ampere)
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_gpu.id]
