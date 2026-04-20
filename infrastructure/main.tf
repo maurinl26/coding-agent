@@ -17,7 +17,7 @@ provider "azurerm" {
 # -------------------------------------------------------------
 resource "azurerm_resource_group" "rg" {
   name     = "rg-total-seismic-agent"
-  location = "France Central" # Région typique TotalEnergies
+  location = "Sweden Central" # Région typique TotalEnergies
 }
 
 resource "azurerm_virtual_network" "vnet" {
@@ -118,4 +118,36 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
     sku       = "2204-gen2"
     version   = "latest"
   }
+}
+
+# --- 4. Azure AI Service pour Mistral ---
+
+resource "azurerm_ai_services" "ai_studio" {
+  name                = "ai-hub-seismic"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku_name            = "S0"
+}
+
+# Note: Le provider azurerm peut varier selon les versions pour AI Studio.
+# On utilise souvent l'extension Cognitive Services pour les modèles MaaS.
+
+resource "azurerm_cognitive_deployment" "mistral_large" {
+  name                 = "mistral-large-v3"
+  cognitive_account_id = azurerm_ai_services.ai_studio.id
+
+  model {
+    format  = "Mistral"
+    name    = "Mistral-large-2411" # Nom exact dans le catalogue Azure AI
+    version = "latest"
+  }
+
+  sku {
+    name     = "Standard"
+    capacity = 1 # Dépend de votre quota de tokens par minute (TPM)
+  }
+}
+
+output "mistral_endpoint" {
+  value = azurerm_ai_services.ai_studio.endpoint
 }
