@@ -148,7 +148,7 @@ resource "azurerm_cognitive_deployment" "mistral_large" {
 
   model {
     format  = "Mistral"
-    name    = "Mistral-large-2411"
+    name    = "Mistral-Large-3"
     version = "latest"
   }
 
