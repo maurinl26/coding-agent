@@ -7,7 +7,6 @@ terraform {
   }
 }
 
-# Configuration du compte Azure
 provider "azurerm" {
   features {}
 }
@@ -17,7 +16,7 @@ provider "azurerm" {
 # -------------------------------------------------------------
 resource "azurerm_resource_group" "rg" {
   name     = "rg-total-seismic-agent"
-  location = "Sweden Central" # Région typique TotalEnergies
+  location = "Sweden Central" 
 }
 
 resource "azurerm_virtual_network" "vnet" {
@@ -35,7 +34,7 @@ resource "azurerm_subnet" "subnet_compute" {
 }
 
 # -------------------------------------------------------------
-# 2. Instance d'Orchestration (Serveur LangGraph / FastMCP)
+# 2. Instance d'Orchestration (Serveur LangGraph)
 # -------------------------------------------------------------
 resource "azurerm_network_interface" "nic_orch" {
   name                = "nic-orchestrator"
@@ -53,7 +52,7 @@ resource "azurerm_linux_virtual_machine" "vm_orch" {
   name                = "vm-orchestrator-d8"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_D8s_v5" # CPU rapide, assez de RAM pour Loki-IFS
+  size                = "Standard_D8s_v5"
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_orch.id]
@@ -77,7 +76,7 @@ resource "azurerm_linux_virtual_machine" "vm_orch" {
 }
 
 # -------------------------------------------------------------
-# 3. Instance de Performance (Calcul JAX & Surrogate FNO)
+# 3. Instance GPU (Nvidia T4 pour validation JAX/FNO)
 # -------------------------------------------------------------
 resource "azurerm_network_interface" "nic_gpu" {
   name                = "nic-gpu"
@@ -92,10 +91,10 @@ resource "azurerm_network_interface" "nic_gpu" {
 }
 
 resource "azurerm_linux_virtual_machine" "vm_gpu" {
-  name                = "vm-gpu-t4"
+  name                = "vm-gpu-t4" # Renommée pour plus de clarté
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_NC4as_T4_v3" # 1x Nvidia A100 80GB (Ampere)
+  size                = "Standard_NC4as_T4_v3" # Économique (environ 0.50€/h)
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_gpu.id]
@@ -108,10 +107,9 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
-    disk_size_gb         = 2048 # Stockage large nécessaire pour les tenseurs de gradient
+    disk_size_gb         = 512 # Réduit pour la PoC
   }
 
-  # Image Optimisée DataScience : Contient déjà CUDA, les drivers Nvidia et Python
   source_image_reference {
     publisher = "microsoft-dsvm"
     offer     = "ubuntu-2204"
@@ -120,8 +118,23 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   }
 }
 
-# --- 4. Azure AI Service pour Mistral ---
+# --- SÉCURITÉ : Arrêt automatique quotidien à 19h00 ---
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_gpu" {
+  virtual_machine_id = azurerm_linux_virtual_machine.vm_gpu.id
+  location           = azurerm_resource_group.rg.location
+  enabled            = true
 
+  daily_recurrence_time = "1900"
+  timezone              = "Romance Standard Time"
+
+  notification_settings {
+    enabled = false
+  }
+}
+
+# -------------------------------------------------------------
+# 4. Azure AI Service pour Mistral Large v3
+# -------------------------------------------------------------
 resource "azurerm_ai_services" "ai_studio" {
   name                = "ai-hub-seismic"
   location            = azurerm_resource_group.rg.location
@@ -129,25 +142,18 @@ resource "azurerm_ai_services" "ai_studio" {
   sku_name            = "S0"
 }
 
-# Note: Le provider azurerm peut varier selon les versions pour AI Studio.
-# On utilise souvent l'extension Cognitive Services pour les modèles MaaS.
-
 resource "azurerm_cognitive_deployment" "mistral_large" {
   name                 = "mistral-large-v3"
   cognitive_account_id = azurerm_ai_services.ai_studio.id
 
   model {
     format  = "Mistral"
-    name    = "Mistral-large-2411" # Nom exact dans le catalogue Azure AI
+    name    = "Mistral-large-2411"
     version = "latest"
   }
 
   sku {
     name     = "Standard"
-    capacity = 1 # Dépend de votre quota de tokens par minute (TPM)
+    capacity = 1
   }
-}
-
-output "mistral_endpoint" {
-  value = azurerm_ai_services.ai_studio.endpoint
 }
