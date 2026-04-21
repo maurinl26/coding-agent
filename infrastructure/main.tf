@@ -6,7 +6,7 @@ terraform {
     }
     azapi = {
       source  = "azure/azapi"
-      version = "~> 1.13" # Indispensable pour les ressources Azure récentes
+      version = "~> 1.13" 
     }
   }
 }
@@ -18,11 +18,11 @@ provider "azurerm" {
 provider "azapi" {}
 
 # -------------------------------------------------------------
-# 1. Groupe de ressources & Réseau Sécurisé
+# 1. Groupe de ressources & Réseau Sécurisé (Région esquivée)
 # -------------------------------------------------------------
 resource "azurerm_resource_group" "rg" {
   name     = "rg-total-seismic-agent"
-  location = "Sweden Central" 
+  location = "East US" # Ou West Europe, là où les quotas sont ouverts
 }
 
 resource "azurerm_virtual_network" "vnet" {
@@ -40,49 +40,7 @@ resource "azurerm_subnet" "subnet_compute" {
 }
 
 # -------------------------------------------------------------
-# 2. Instance d'Orchestration (Serveur LangGraph)
-# -------------------------------------------------------------
-resource "azurerm_network_interface" "nic_orch" {
-  name                = "nic-orchestrator"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-
-  ip_configuration {
-    name                          = "internal"
-    subnet_id                     = azurerm_subnet.subnet_compute.id
-    private_ip_address_allocation = "Dynamic"
-  }
-}
-
-resource "azurerm_linux_virtual_machine" "vm_orch" {
-  name                = "vm-orchestrator-d8"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = "Standard_D8s_v5"
-  admin_username      = "azureuser"
-  
-  network_interface_ids = [azurerm_network_interface.nic_orch.id]
-
-  admin_ssh_key {
-    username   = "azureuser"
-    public_key = var.ssh_public_key
-  }
-
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
-  }
-
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts"
-    version   = "latest"
-  }
-}
-
-# -------------------------------------------------------------
-# 3. Instance GPU (Nvidia T4 pour validation JAX/FNO)
+# 2. Instance de Calcul (GPU T4 & Outils Fortran)
 # -------------------------------------------------------------
 resource "azurerm_network_interface" "nic_gpu" {
   name                = "nic-gpu"
@@ -97,10 +55,10 @@ resource "azurerm_network_interface" "nic_gpu" {
 }
 
 resource "azurerm_linux_virtual_machine" "vm_gpu" {
-  name                = "vm-gpu-t4" # Renommée pour plus de clarté
+  name                = "vm-gpu-t4-fortran"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_NC4as_T4_v3" # Économique (environ 0.50€/h)
+  size                = "Standard_NC4as_T4_v3" 
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_gpu.id]
@@ -113,15 +71,26 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
-    disk_size_gb         = 512 # Réduit pour la PoC
+    disk_size_gb         = 128 
   }
 
   source_image_reference {
-    publisher = "microsoft-dsvm"
-    offer     = "ubuntu-2204"
-    sku       = "2204-gen2"
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
     version   = "latest"
   }
+
+  custom_data = base64encode(<<-EOF
+    #!/bin/bash
+    apt-get update && apt-get upgrade -y
+    apt-get install -y build-essential wget curl environment-modules nvidia-headless-535 nvidia-utils-535
+    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/x86_64/nvhpc.list | tee /etc/apt/sources.list.d/nvhpc.list
+    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/x86_64/7fa2af80.pub | apt-key add -
+    apt-get update
+    apt-get install -y nvhpc-24-1 python3-venv python3-pip
+  EOF
+  )
 }
 
 # --- SÉCURITÉ : Arrêt automatique quotidien à 19h00 ---
@@ -129,31 +98,15 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_gpu" {
   virtual_machine_id = azurerm_linux_virtual_machine.vm_gpu.id
   location           = azurerm_resource_group.rg.location
   enabled            = true
-
   daily_recurrence_time = "1900"
   timezone              = "Romance Standard Time"
-
-  notification_settings {
-    enabled = false
-  }
-}
-
-# --- SÉCURITÉ : Arrêt automatique de l'orchestrateur à 19h00 ---
-resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_orch" {
-  virtual_machine_id = azurerm_linux_virtual_machine.vm_orch.id
-  location           = azurerm_resource_group.rg.location
-  enabled            = true
-
-  daily_recurrence_time = "1900"
-  timezone              = "Romance Standard Time"
-
   notification_settings {
     enabled = false
   }
 }
 
 # -------------------------------------------------------------
-# 4. Azure AI Service & Mistral Large v3 (via AzAPI)
+# 3. Azure AI Service pour Mistral Large v3 (via AzAPI)
 # -------------------------------------------------------------
 resource "azurerm_ai_services" "ai_studio" {
   name                = "ai-hub-seismic"
@@ -166,7 +119,6 @@ resource "azapi_resource" "mistral_large" {
   type      = "Microsoft.CognitiveServices/accounts/deployments@2023-05-01"
   name      = "mistral-large-v3"
   parent_id = azurerm_ai_services.ai_studio.id
-
   body = jsonencode({
     properties = {
       model = {
