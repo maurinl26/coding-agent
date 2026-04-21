@@ -59,7 +59,7 @@ resource "azurerm_linux_virtual_machine" "vm_orch" {
 
   admin_ssh_key {
     username   = "azureuser"
-    public_key = file("~/.ssh/id_rsa.pub")
+    public_key = var.ssh_public_key
   }
 
   os_disk {
@@ -101,7 +101,7 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
 
   admin_ssh_key {
     username   = "azureuser"
-    public_key = file("~/.ssh/id_rsa.pub")
+    public_key = var.ssh_public_key
   }
 
   os_disk {
@@ -152,8 +152,8 @@ resource "azurerm_cognitive_deployment" "mistral_large" {
     version = "latest"
   }
 
-  sku {
-    name     = "Standard"
+  scale {
+    type     = "Standard"
     capacity = 1
   }
 }
