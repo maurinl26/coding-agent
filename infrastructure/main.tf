@@ -4,12 +4,18 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
+    azapi = {
+      source  = "azure/azapi"
+      version = "~> 1.13" # Indispensable pour les ressources Azure récentes
+    }
   }
 }
 
 provider "azurerm" {
   features {}
 }
+
+provider "azapi" {}
 
 # -------------------------------------------------------------
 # 1. Groupe de ressources & Réseau Sécurisé
@@ -147,7 +153,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_orch" {
 }
 
 # -------------------------------------------------------------
-# 4. Azure AI Service pour Mistral Large v3
+# 4. Azure AI Service & Mistral Large v3 (via AzAPI)
 # -------------------------------------------------------------
 resource "azurerm_ai_services" "ai_studio" {
   name                = "ai-hub-seismic"
@@ -156,18 +162,18 @@ resource "azurerm_ai_services" "ai_studio" {
   sku_name            = "S0"
 }
 
-resource "azurerm_cognitive_deployment" "mistral_large" {
-  name                 = "mistral-large-v3"
-  cognitive_account_id = azurerm_ai_services.ai_studio.id
+resource "azapi_resource" "mistral_large" {
+  type      = "Microsoft.CognitiveServices/accounts/deployments@2023-05-01"
+  name      = "mistral-large-v3"
+  parent_id = azurerm_ai_services.ai_studio.id
 
-  model {
-    format  = "Mistral" # Correction : Mistral n'est pas au format OpenAI
-    name    = "Mistral-large-2411" # Nom de modèle plus précis pour le catalogue Azure
-    version = "1"
-  }
-
-  scale {
-    type     = "Standard"
-    capacity = 1
-  }
+  body = jsonencode({
+    properties = {
+      model = {
+        format  = "Mistral"
+        name    = "Mistral-large-2411"
+        version = "1"
+      }
+    }
+  })
 }
