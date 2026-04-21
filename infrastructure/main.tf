@@ -132,6 +132,20 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_gpu" {
   }
 }
 
+# --- SÉCURITÉ : Arrêt automatique de l'orchestrateur à 19h00 ---
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_orch" {
+  virtual_machine_id = azurerm_linux_virtual_machine.vm_orch.id
+  location           = azurerm_resource_group.rg.location
+  enabled            = true
+
+  daily_recurrence_time = "1900"
+  timezone              = "Romance Standard Time"
+
+  notification_settings {
+    enabled = false
+  }
+}
+
 # -------------------------------------------------------------
 # 4. Azure AI Service pour Mistral Large v3
 # -------------------------------------------------------------
@@ -147,9 +161,9 @@ resource "azurerm_cognitive_deployment" "mistral_large" {
   cognitive_account_id = azurerm_ai_services.ai_studio.id
 
   model {
-    format  = "OpenAI"
-    name    = "Mistral-Large-3"
-    version = "latest"
+    format  = "Mistral" # Correction : Mistral n'est pas au format OpenAI
+    name    = "Mistral-large-2411" # Nom de modèle plus précis pour le catalogue Azure
+    version = "1"
   }
 
   scale {
