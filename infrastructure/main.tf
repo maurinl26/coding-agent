@@ -147,7 +147,7 @@ resource "azurerm_cognitive_deployment" "mistral_large" {
   cognitive_account_id = azurerm_ai_services.ai_studio.id
 
   model {
-    format  = "Mistral"
+    format  = "OpenAI"
     name    = "Mistral-Large-3"
     version = "latest"
   }
