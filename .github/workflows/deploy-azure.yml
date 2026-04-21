@@ -35,10 +35,12 @@ jobs:
 
     - name: Terraform Init
       run: terraform init
+      working-directory: infrastructure
 
     - name: Terraform Plan
       run: terraform plan -input=false ${{ github.event.inputs.action == 'destroy' && '-destroy' || '' }}
+      working-directory: infrastructure
 
     - name: Terraform Action
-      # On exécute soit apply, soit destroy selon votre choix manuel
       run: terraform ${{ github.event.inputs.action }} -auto-approve -input=false
+      working-directory: infrastructure
