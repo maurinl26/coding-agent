@@ -58,7 +58,8 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   name                = "vm-gpu-t4-fortran"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_NC4as_T4_v3" 
+  # Standard_B2s while GPU quota (Standard_NC4as_T4_v3) is pending approval
+  size                = "Standard_B2s"
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_gpu.id]
@@ -84,11 +85,7 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   custom_data = base64encode(<<-EOF
     #!/bin/bash
     apt-get update && apt-get upgrade -y
-    apt-get install -y build-essential wget curl environment-modules nvidia-headless-535 nvidia-utils-535
-    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/x86_64/nvhpc.list | tee /etc/apt/sources.list.d/nvhpc.list
-    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/x86_64/7fa2af80.pub | apt-key add -
-    apt-get update
-    apt-get install -y nvhpc-24-1 python3-venv python3-pip
+    apt-get install -y build-essential wget curl python3-venv python3-pip
   EOF
   )
 }
@@ -120,6 +117,10 @@ resource "azapi_resource" "mistral_large" {
   name      = "mistral-large-v3"
   parent_id = azurerm_ai_services.ai_studio.id
   body = jsonencode({
+    sku = {
+      name     = "Standard"
+      capacity = 1
+    }
     properties = {
       model = {
         format  = "Mistral"

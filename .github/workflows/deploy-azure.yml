@@ -38,6 +38,23 @@ jobs:
       run: terraform init
       working-directory: infrastructure
 
+    - name: Import Pre-existing Resources
+      if: github.event.inputs.action == 'apply'
+      working-directory: infrastructure
+      run: |
+        SUB="/subscriptions/${ARM_SUBSCRIPTION_ID}"
+        RG="rg-total-seismic-agent"
+        terraform import azurerm_resource_group.rg \
+          "${SUB}/resourceGroups/${RG}" 2>/dev/null || true
+        terraform import azurerm_virtual_network.vnet \
+          "${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/vnet-seismic" 2>/dev/null || true
+        terraform import azurerm_subnet.subnet_compute \
+          "${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/vnet-seismic/subnets/snet-compute" 2>/dev/null || true
+        terraform import azurerm_network_interface.nic_gpu \
+          "${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/nic-gpu" 2>/dev/null || true
+        terraform import azurerm_ai_services.ai_studio \
+          "${SUB}/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/ai-hub-seismic" 2>/dev/null || true
+
     - name: Terraform Plan
       run: terraform plan -input=false ${{ github.event.inputs.action == 'destroy' && '-destroy' || '' }}
       working-directory: infrastructure
