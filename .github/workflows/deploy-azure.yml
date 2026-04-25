@@ -38,6 +38,14 @@ jobs:
       run: terraform init
       working-directory: infrastructure
 
+    - name: Azure CLI Login
+      run: az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
+
+    - name: Cleanup Orphaned Resources
+      if: github.event.inputs.action == 'apply'
+      run: |
+        az network nic delete --resource-group rg-total-seismic-agent --name NIC-ORCHESTRATOR --yes 2>/dev/null || true
+
     - name: Import Pre-existing Resources
       if: github.event.inputs.action == 'apply'
       working-directory: infrastructure
