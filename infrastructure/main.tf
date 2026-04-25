@@ -4,18 +4,12 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
-    azapi = {
-      source  = "azure/azapi"
-      version = "~> 1.13" 
-    }
   }
 }
 
 provider "azurerm" {
   features {}
 }
-
-provider "azapi" {}
 
 # -------------------------------------------------------------
 # 1. Groupe de ressources & Réseau Sécurisé (Région esquivée)
@@ -63,8 +57,8 @@ resource "azurerm_linux_virtual_machine" "vm_gpu" {
   name                = "vm-gpu-t4-fortran"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  # Standard_B2s while GPU quota (Standard_NC4as_T4_v3) is pending approval
-  size                = "Standard_B2s"
+  # Standard_D2s_v3 while GPU quota (Standard_NC4as_T4_v3) is pending approval
+  size                = "Standard_D2s_v3"
   admin_username      = "azureuser"
   
   network_interface_ids = [azurerm_network_interface.nic_gpu.id]
@@ -108,7 +102,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown_gpu" {
 }
 
 # -------------------------------------------------------------
-# 3. Azure AI Service pour Mistral Large v3 (via AzAPI)
+# 3. Azure AI Services account (Mistral deployed separately via AI Foundry)
 # -------------------------------------------------------------
 resource "azurerm_ai_services" "ai_studio" {
   name                = "ai-hub-seismic"
@@ -116,22 +110,5 @@ resource "azurerm_ai_services" "ai_studio" {
   resource_group_name = azurerm_resource_group.rg.name
   sku_name            = "S0"
 }
-
-resource "azapi_resource" "mistral_large" {
-  type      = "Microsoft.CognitiveServices/accounts/deployments@2023-05-01"
-  name      = "mistral-large-v3"
-  parent_id = azurerm_ai_services.ai_studio.id
-  body = jsonencode({
-    sku = {
-      name     = "Standard"
-      capacity = 1
-    }
-    properties = {
-      model = {
-        format  = "Mistral"
-        name    = "Mistral-large-2411"
-        version = "1"
-      }
-    }
-  })
-}
+# Note: Mistral-large-2411 must be deployed manually through Azure AI Foundry
+# (serverless endpoint via Microsoft.MachineLearningServices, not CognitiveServices)
