@@ -41,10 +41,16 @@ jobs:
     - name: Azure CLI Login
       run: az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
 
-    - name: Cleanup Orphaned Resources
+    - name: Cleanup Stale Resources
       if: github.event.inputs.action == 'apply'
       run: |
-        az network nic delete --resource-group rg-total-seismic-agent --name NIC-ORCHESTRATOR --yes 2>/dev/null || true
+        # If RG exists in wrong region, delete it entirely — location is immutable so Terraform
+        # would try destroy+recreate anyway, but the orphaned NIC-ORCHESTRATOR blocks VNet deletion.
+        LOCATION=$(az group show --name rg-total-seismic-agent --query location -o tsv 2>/dev/null || echo "")
+        if [ -n "$LOCATION" ] && [ "$LOCATION" != "eastus" ]; then
+          echo "RG is in '$LOCATION', deleting so Terraform can recreate in eastus..."
+          az group delete --name rg-total-seismic-agent --yes
+        fi
 
     - name: Import Pre-existing Resources
       if: github.event.inputs.action == 'apply'
